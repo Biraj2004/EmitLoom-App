@@ -55,6 +55,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private val _controllers = MutableStateFlow(library.controllers())
     val controllers = _controllers.asStateFlow()
+    private val _controllerGrid = MutableStateFlow(library.usesControllerGrid())
+    val controllerGrid = _controllerGrid.asStateFlow()
     private val _looks = MutableStateFlow(library.looks())
     val looks = _looks.asStateFlow()
     private val _sequences = MutableStateFlow(library.sequences())
@@ -97,6 +99,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun scan() = ble.startScan()
+    fun setControllerGrid(enabled: Boolean) {
+        if (_controllerGrid.value == enabled) return
+        _controllerGrid.value = enabled
+        library.storeControllerGrid(enabled)
+    }
+
     fun stopScan() = ble.stopScan()
     fun connect(entry: ScanEntry) = connect(SavedController(entry.device, entry.name))
 

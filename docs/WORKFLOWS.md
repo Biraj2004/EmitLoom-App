@@ -2,7 +2,7 @@
 
 | Screen | What you can do |
 | --- | --- |
-| Your lights | Find compatible nearby controllers, reconnect to saved devices, and see connection status. |
+| Your lights | Find compatible nearby controllers, reconnect to saved devices, and see connection status in a list or grid. Your layout choice is saved on the phone. |
 | Color | Pick RGB colors and set brightness. Compatible outputs also expose white brightness and warmth. |
 | Effects | Choose a preset and adjust the controls exposed for that model and effect. |
 | Sound | Use supported controller microphones or use your phone microphone to pulse RGB brightness. |

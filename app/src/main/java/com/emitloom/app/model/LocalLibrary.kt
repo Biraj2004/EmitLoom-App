@@ -15,6 +15,12 @@ data class SavedLook(
 class LocalLibrary(context: Context) {
     private val prefs = context.getSharedPreferences("emitloom_library", Context.MODE_PRIVATE)
 
+    fun usesControllerGrid(): Boolean = prefs.getBoolean("controller_grid", false)
+
+    fun storeControllerGrid(enabled: Boolean) {
+        prefs.edit().putBoolean("controller_grid", enabled).apply()
+    }
+
     fun controllers() = read("controllers") {
         val profile = ControllerProfile.valueOf(it.getString("profile"))
         val device = ControllerDevice(it.getString("address"), it.getString("model"), profile)

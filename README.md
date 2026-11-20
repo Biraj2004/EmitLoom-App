@@ -11,7 +11,7 @@ EmitLoom is a native Android app for controlling compatible LED lights over Blue
 
 ## What you can do
 
-- Scan for nearby controllers, reconnect to saved devices, and rename them locally.
+- Scan for nearby controllers, reconnect to saved devices, and rename them locally. Switch between list and grid views, with the choice saved on the phone.
 - Set power, solid RGB color and brightness. Supported outputs also expose white brightness and color temperature.
 - Browse controller effects, adjust speed, and use the hardware microphone on models that provide one. Phone microphone sync pulses RGB brightness while the app is open.
 - Save and recall looks on your phone. SP601E also exposes existing controller scene slots and separate output controls.

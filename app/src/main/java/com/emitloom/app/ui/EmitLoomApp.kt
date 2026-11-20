@@ -8,6 +8,7 @@ import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -22,6 +23,10 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.lazy.grid.GridCells
+import androidx.compose.foundation.lazy.grid.GridItemSpan
+import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
+import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
@@ -45,6 +50,10 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.SegmentedButton
+import androidx.compose.material3.SegmentedButtonDefaults
+import androidx.compose.material3.SingleChoiceSegmentedButtonRow
+import androidx.compose.material3.Surface
 import androidx.compose.material3.SnackbarHost
 import androidx.compose.material3.SnackbarHostState
 import androidx.compose.material3.Text
@@ -64,6 +73,7 @@ import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.emitloom.app.bluetooth.DiscoveryState
@@ -75,6 +85,7 @@ private enum class Page { DEVICES, CONTROL, SETTINGS }
 @Composable
 fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedController) -> Unit, onPhoneMic: () -> Unit) {
     val saved by model.controllers.collectAsStateWithLifecycle()
+    val controllerGrid by model.controllerGrid.collectAsStateWithLifecycle()
     val discovery by model.discovery.collectAsStateWithLifecycle()
     val connection by model.connection.collectAsStateWithLifecycle()
     val controls by model.controls.collectAsStateWithLifecycle()
@@ -140,8 +151,10 @@ fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedContr
                     active != null && page == Page.CONTROL -> ControllerScreen(
                         model, active, onSettings = { page = Page.SETTINGS }, onPhoneMic = onPhoneMic
                     )
-                    else -> DeviceList(
+                    else -> DeviceCollection(
                         saved = saved,
+                        grid = controllerGrid,
+                        onLayoutChange = model::setControllerGrid,
                         connected = active?.device?.address,
                         connecting = connection.device?.address.takeIf { connection.connecting },
                         error = connection.error,
@@ -187,8 +200,10 @@ fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedContr
 }
 
 @Composable
-private fun DeviceList(
+private fun DeviceCollection(
     saved: List<SavedController>,
+    grid: Boolean,
+    onLayoutChange: (Boolean) -> Unit,
     connected: String?,
     connecting: String?,
     error: String?,
@@ -196,12 +211,14 @@ private fun DeviceList(
     onFind: () -> Unit,
     onOpen: (SavedController) -> Unit
 ) {
-    LazyColumn(
+    LazyVerticalGrid(
+        columns = if (grid) GridCells.Adaptive(minSize = 144.dp) else GridCells.Fixed(1),
         modifier = Modifier.fillMaxSize(),
         contentPadding = PaddingValues(horizontal = 20.dp, vertical = 16.dp),
-        verticalArrangement = Arrangement.spacedBy(12.dp)
+        verticalArrangement = Arrangement.spacedBy(12.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        item {
+        item(span = { GridItemSpan(maxLineSpan) }) {
             Column(
                 Modifier.fillMaxWidth().background(Panel, RoundedCornerShape(22.dp)).padding(22.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
@@ -216,7 +233,7 @@ private fun DeviceList(
             }
         }
         if (connecting != null) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 LinearProgressIndicator(Modifier.fillMaxWidth())
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("Reading controller status…", Modifier.weight(1f), color = TextMuted)
@@ -225,11 +242,31 @@ private fun DeviceList(
             }
         }
         if (error != null) {
-            item { Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 4.dp)) }
+            item(span = { GridItemSpan(maxLineSpan) }) {
+                Text(error, color = MaterialTheme.colorScheme.error, modifier = Modifier.padding(vertical = 4.dp))
+            }
         }
-        item { SectionTitle("Controllers") }
+        item(span = { GridItemSpan(maxLineSpan) }) {
+            Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                SectionTitle("Controllers")
+                SingleChoiceSegmentedButtonRow {
+                    SegmentedButton(
+                        selected = !grid,
+                        onClick = { onLayoutChange(false) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 0, count = 2),
+                        label = { Text("List") }
+                    )
+                    SegmentedButton(
+                        selected = grid,
+                        onClick = { onLayoutChange(true) },
+                        shape = SegmentedButtonDefaults.itemShape(index = 1, count = 2),
+                        label = { Text("Grid") }
+                    )
+                }
+            }
+        }
         if (saved.isEmpty()) {
-            item {
+            item(span = { GridItemSpan(maxLineSpan) }) {
                 ListItem(
                     headlineContent = { Text("No controllers saved") },
                     supportingContent = { Text("Turn on your controller, then choose Find lights.") },
@@ -246,7 +283,27 @@ private fun DeviceList(
                 connecting -> "${item.device.model} · Connecting"
                 else -> item.device.model
             }
-            ControllerRow(item.name, description, onClick = { onOpen(item) })
+            if (grid) {
+                ControllerTile(item.name, description) { onOpen(item) }
+            } else {
+                ControllerRow(item.name, description) { onOpen(item) }
+            }
+        }
+    }
+}
+
+@Composable
+private fun ControllerTile(name: String, detail: String, onClick: () -> Unit) {
+    Surface(
+        onClick = onClick,
+        color = Panel,
+        shape = RoundedCornerShape(14.dp),
+        modifier = Modifier.fillMaxWidth().heightIn(min = 124.dp)
+    ) {
+        Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Icon(Icons.Rounded.Lightbulb, null, tint = Mint)
+            Text(name, style = MaterialTheme.typography.titleSmall, maxLines = 2, overflow = TextOverflow.Ellipsis)
+            Text(detail, style = MaterialTheme.typography.bodySmall, color = TextMuted)
         }
     }
 }

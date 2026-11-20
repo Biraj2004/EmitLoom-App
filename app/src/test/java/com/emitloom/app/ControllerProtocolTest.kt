@@ -39,6 +39,26 @@ class ControllerProtocolTest {
     }
 
     @Test
+    fun a0WhiteBrightnessSelectsWhiteBeforeApplyingLevel() {
+        val protocol = ControllerProtocol(ControllerProfile.A0)
+        val changed = protocol.white(channel = 0, level = 128, switchMode = true)
+        assertEquals(2, changed.size)
+        assertArrayEquals(bytes(0xA0, 0x63, 1, 0xBF), changed[0])
+        assertArrayEquals(bytes(0xA0, 0x76, 2, 128, 0), changed[1])
+        assertArrayEquals(bytes(0xA0, 0x76, 2, 0, 0), protocol.white(0, 0, false).single())
+    }
+
+    @Test
+    fun compactWhiteBrightnessKeepsItsProfileSpecificMarker() {
+        val protocol = ControllerProtocol(ControllerProfile.COMPACT)
+        val changed = protocol.white(channel = 0, level = 128, switchMode = true)
+        assertEquals(2, changed.size)
+        assertArrayEquals(bytes(0x15, 1, 0xCC), changed[0])
+        assertArrayEquals(bytes(0x21, 2, 128, 0xFF), changed[1])
+        assertArrayEquals(bytes(0x21, 2, 255, 0xFF), protocol.white(0, 255, false).single())
+    }
+
+    @Test
     fun dualOutputStatusAndWritesKeepChannelsIndependent() {
         val decoder = StatusDecoder(ControllerProfile.DUAL)
         val status = bytes(0x53, 0x43, 1, 23, 23) +
