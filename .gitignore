@@ -1,0 +1,31 @@
+# Gradle, IDE and local Android SDK
+.gradle/
+.kotlin/
+.idea/
+*.iml
+**/build/
+/local.properties
+/captures/
+.externalNativeBuild/
+.cxx/
+.DS_Store
+*.vscode/
+
+# APKs, signing keys and local signing configuration
+/apk-export/
+*.apk
+*.aab
+*.xapk
+*.apks
+*.keystore
+*.jks
+*.p12
+*.pfx
+/signing.properties
+/.*-signing/
+
+# Private compatibility research and local analysis tools
+/apk-re/
+/rea_references/
+/rea_skill.md
+/tools/

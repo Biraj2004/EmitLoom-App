@@ -1,0 +1,13 @@
+EmitLoom
+
+EmitLoom source is provided under the GNU Affero General Public License v3.0 only.
+
+This APK uses AndroidX libraries and Compose Material Icons from the Android
+Open Source Project, Kotlin standard library from JetBrains, Kotlin coroutines
+from JetBrains and contributors, and related dependencies. Their Apache 2.0
+license text is provided in Apache-2.0.txt. Original notices in packaged
+dependency metadata also apply.
+
+https://github.com/androidx/androidx
+https://github.com/JetBrains/kotlin
+https://github.com/Kotlin/kotlinx.coroutines
