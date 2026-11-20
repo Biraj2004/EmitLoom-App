@@ -70,6 +70,7 @@ class MainActivity : ComponentActivity() {
     }
 
     override fun onStop() {
+        model.stopSequence()
         model.stopScan()
         model.stopPhoneMic()
         super.onStop()

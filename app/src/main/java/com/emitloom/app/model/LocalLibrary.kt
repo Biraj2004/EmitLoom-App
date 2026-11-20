@@ -52,6 +52,22 @@ class LocalLibrary(context: Context) {
         return (0 until array.length()).mapNotNull { runCatching { decode(array.getJSONObject(it)) }.getOrNull() }
     }
 
+    fun sequences() = read("sequences") { item ->
+        val steps = item.getJSONArray("steps")
+        ColorSequence(item.getString("id"), item.getString("name"), List(steps.length()) { index ->
+            val step = steps.getJSONObject(index)
+            requireNotNull(ColorStep.parse(step.getString("color"), step.getString("seconds")))
+        }, item.getBoolean("loop"))
+    }
+
+    fun storeSequences(sequences: List<ColorSequence>) = write("sequences", sequences.map { sequence ->
+        val steps = sequence.steps.map { step ->
+            JSONObject().put("color", step.color.toHex()).put("seconds", step.seconds)
+        }
+        JSONObject().put("id", sequence.id).put("name", sequence.name)
+            .put("steps", JSONArray(steps)).put("loop", sequence.loop)
+    })
+
     private fun write(key: String, values: List<JSONObject>) {
         prefs.edit().putString(key, JSONArray(values).toString()).apply()
     }

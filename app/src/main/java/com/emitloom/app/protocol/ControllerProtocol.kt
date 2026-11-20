@@ -4,6 +4,7 @@ package com.emitloom.app.protocol
 
 import com.emitloom.app.model.ColorRgb
 import com.emitloom.app.model.LightMode
+import com.emitloom.app.model.PowerTransition
 import java.util.UUID
 
 private fun bleUuid(id: String) = UUID.fromString("0000$id-0000-1000-8000-00805f9b34fb")
@@ -145,6 +146,8 @@ class ControllerProtocol(val profile: ControllerProfile) {
     fun play(playing: Boolean) = sceneFrame(0x5d, playing.flag)
     fun temperature(cold: Int, warm: Int) = sceneFrame(0x61, cold, warm)
     fun restore(mode: Int) = sceneFrame(0x0b, mode)
+    fun powerTransition(setting: PowerTransition) =
+        sceneFrame(0x08, 1, setting.effect, setting.speed, setting.pixels shr 8, setting.pixels and 255)
     fun coexist(enabled: Boolean) = sceneFrame(0x0a, enabled.flag)
     fun lightType(type: Int) = sceneFrame(0x6a, 1, type and 0x7f)
     fun scene(slot: Int) = if (profile == ControllerProfile.DUAL) frame(0x2e, slot) else null

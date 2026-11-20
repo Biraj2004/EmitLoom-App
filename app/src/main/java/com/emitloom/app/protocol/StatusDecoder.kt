@@ -6,6 +6,7 @@ import com.emitloom.app.model.ColorRgb
 import com.emitloom.app.model.LightMode
 import com.emitloom.app.model.LightState
 import com.emitloom.app.model.LightType
+import com.emitloom.app.model.PowerTransition
 
 class StatusDecoder(private val profile: ControllerProfile) {
     private var buffered = byteArrayOf()
@@ -28,7 +29,8 @@ class StatusDecoder(private val profile: ControllerProfile) {
                     loop = packet.u(30) != 0, input = packet.u(46), white = packet.u(36),
                     cold = packet.u(40), warm = packet.u(41), lightType = packet.u(19), order = packet.u(31),
                     firmware = packet.copyOfRange(11, 18).decodeToString().trim { it <= ' ' },
-                    powerRestore = packet.u(25), coexist = packet.u(24) != 0
+                    powerRestore = packet.u(25), coexist = packet.u(24) != 0,
+                    powerTransition = PowerTransition.fromWire(packet.u(20), packet.u(21), packet.u(22) * 256 + packet.u(23))
                 )
             )
         }

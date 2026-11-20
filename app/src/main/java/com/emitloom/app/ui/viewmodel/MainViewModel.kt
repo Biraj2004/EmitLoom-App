@@ -10,11 +10,14 @@ import com.emitloom.app.audio.AudioReactiveEngine
 import com.emitloom.app.bluetooth.BleManager
 import com.emitloom.app.bluetooth.ScanEntry
 import com.emitloom.app.model.ColorRgb
+import com.emitloom.app.model.ColorSequence
+import com.emitloom.app.model.ColorStep
 import com.emitloom.app.model.ControllerDevice
 import com.emitloom.app.model.LightMode
 import com.emitloom.app.model.LightState
 import com.emitloom.app.model.LightType
 import com.emitloom.app.model.LocalLibrary
+import com.emitloom.app.model.PowerTransition
 import com.emitloom.app.model.SavedController
 import com.emitloom.app.model.SavedLook
 import com.emitloom.app.model.effects
@@ -24,9 +27,11 @@ import com.emitloom.app.model.lightType
 import com.emitloom.app.protocol.ControllerProfile
 import com.emitloom.app.protocol.ControllerProtocol
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.CoroutineStart
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.update
@@ -52,6 +57,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     val controllers = _controllers.asStateFlow()
     private val _looks = MutableStateFlow(library.looks())
     val looks = _looks.asStateFlow()
+    private val _sequences = MutableStateFlow(library.sequences())
+    val sequences = _sequences.asStateFlow()
+    private val _playingSequence = MutableStateFlow<String?>(null)
+    val playingSequence = _playingSequence.asStateFlow()
+    private var sequenceJob: Job? = null
     private val _controls = MutableStateFlow<DeviceControls?>(null)
     val controls = _controls.asStateFlow()
     private val _timer = MutableStateFlow<ActiveTimer?>(null)
@@ -70,6 +80,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 val device = value.device
                 if (device == null || value.outputs.isEmpty()) {
                     _controls.value = null
+                    stopSequence()
                     stopPhoneMic(restore = false)
                     cancelTimer()
                     return@collect
@@ -99,6 +110,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnect() {
+        stopSequence()
         stopPhoneMic(restore = false)
         cancelTimer()
         _controls.value = null
@@ -120,6 +132,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun selectChannel(channel: Int) {
         val current = _controls.value ?: return
         if (channel !in current.outputs.indices || channel == current.channel) return
+        stopSequence()
         stopPhoneMic()
         _controls.value = current.copy(channel = channel)
     }
@@ -228,6 +241,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         listOfNotNull(protocol.restore(mode)) to current.light.copy(powerRestore = mode)
     }
 
+    fun powerTransition(setting: PowerTransition) = change { protocol, current ->
+        listOfNotNull(protocol.powerTransition(setting)) to current.light.copy(powerTransition = setting)
+    }
+
     fun coexist(enabled: Boolean) = change { protocol, current ->
         listOfNotNull(protocol.coexist(enabled)) to current.light.copy(coexist = enabled)
     }
@@ -236,11 +253,13 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _controls.value ?: return
         val protocol = ControllerProtocol(current.device.profile)
         val scene = protocol.scene(slot) ?: return
+        stopSequence()
         ble.send(listOf(scene, protocol.status()))
     }
 
     fun refresh() {
         val current = _controls.value ?: return
+        stopSequence()
         stopPhoneMic()
         ble.send(listOf(ControllerProtocol(current.device.profile).status()))
     }
@@ -318,7 +337,10 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             delay(duration)
             val active = _controls.value?.takeIf { it.device == current.device }
             if (active != null) {
-                if (!turnOn && timer.channel == active.channel) stopPhoneMic(restore = false)
+                if (!turnOn && timer.channel == active.channel) {
+                    stopSequence()
+                    stopPhoneMic(restore = false)
+                }
                 val packet = ControllerProtocol(active.device.profile).power(timer.channel, turnOn)
                 if (ble.send(listOf(packet))) {
                     updateOutput(active, timer.channel, active.outputs[timer.channel].copy(power = turnOn))
@@ -371,11 +393,69 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     fun stopPhoneMic() = stopPhoneMic(restore = true)
 
+    fun saveSequence(id: String?, name: String, steps: List<ColorStep>, loop: Boolean) {
+        val sequence = ColorSequence(id ?: UUID.randomUUID().toString(), name.trim(), steps.toList(), loop)
+        if (_playingSequence.value == id) stopSequence()
+        val previous = _sequences.value
+        updateSequences(if (id == null) previous + sequence else previous.map { if (it.id == id) sequence else it })
+    }
+
+    fun deleteSequence(id: String) {
+        if (_playingSequence.value == id) stopSequence()
+        updateSequences(_sequences.value.filterNot { it.id == id })
+    }
+
+    fun playSequence(sequence: ColorSequence) {
+        val selected = _controls.value ?: return
+        if (!selected.device.hasRgb(selected.light)) return
+        stopSequence()
+        stopPhoneMic()
+        val protocol = ControllerProtocol(selected.device.profile)
+        _playingSequence.value = sequence.id
+        sequenceJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
+            try {
+                do {
+                    for (step in sequence.steps) {
+                        val current = _controls.value ?: return@launch
+                        if (current.device != selected.device || current.channel != selected.channel) return@launch
+                        val light = current.light
+                        val packets = buildList {
+                            if (!light.power) add(protocol.power(current.channel, true))
+                            addAll(protocol.color(current.channel, step.color, light.brightness, light.mode != LightMode.COLOR))
+                        }
+                        if (!ble.send(packets, "sequence-${current.channel}".takeIf { light.power && light.mode == LightMode.COLOR })) {
+                            return@launch
+                        }
+                        updateOutput(current, current.channel, light.copy(
+                            power = true, color = step.color, mode = LightMode.COLOR, effect = protocol.profile.solidEffect
+                        ))
+                        delay(step.seconds * 1_000L)
+                    }
+                } while (sequence.loop)
+            } finally {
+                if (sequenceJob === currentCoroutineContext()[Job]) _playingSequence.value = null
+            }
+        }
+        sequenceJob?.start()
+    }
+
+    fun stopSequence() {
+        _playingSequence.value = null
+        sequenceJob?.cancel()
+        sequenceJob = null
+    }
+
+    private fun updateSequences(sequences: List<ColorSequence>) {
+        _sequences.value = sequences
+        library.storeSequences(sequences)
+    }
+
     fun showMessage(message: String) { _message.value = message }
     fun clearMessage(displayed: String) { _message.compareAndSet(displayed, null) }
 
     private fun change(key: String? = null, build: (ControllerProtocol, DeviceControls) -> Pair<List<ByteArray>, LightState>) {
         val current = _controls.value ?: return
+        stopSequence()
         val (packets, next) = build(ControllerProtocol(current.device.profile), current)
         val coalesce = key?.let { "$it-${current.channel}" }?.takeIf { current.light.mode == next.mode }
         if (ble.send(packets, coalesce)) updateOutput(current, current.channel, next)

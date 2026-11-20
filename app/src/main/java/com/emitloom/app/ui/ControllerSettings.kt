@@ -12,6 +12,7 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.BluetoothDisabled
 import androidx.compose.material.icons.rounded.ChevronRight
@@ -22,6 +23,7 @@ import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -32,8 +34,10 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import com.emitloom.app.model.LightType
+import com.emitloom.app.model.PowerTransition
 import com.emitloom.app.model.SavedController
 import com.emitloom.app.model.chipOrders
 import com.emitloom.app.model.lightType
@@ -55,6 +59,7 @@ internal fun ControllerSettings(model: MainViewModel, current: DeviceControls, c
     }
     val orders = chipOrders(sequence)
     val powerModes = listOf("Stay off", "Turn on", "Restore last state")
+    val transitionEffects = listOf("Forward flow", "Reverse flow", "Gradient", "Stars")
     var dialog by rememberSaveable { mutableStateOf("") }
     var pendingType by rememberSaveable { mutableStateOf<Int?>(null) }
 
@@ -89,6 +94,9 @@ internal fun ControllerSettings(model: MainViewModel, current: DeviceControls, c
                             dialog = "restore"
                         }
                     }
+                    light.powerTransition?.let { transition ->
+                        SettingsRow("Power transition", transitionEffects[transition.effect - 1]) { dialog = "transition" }
+                    }
                 }
             }
         }
@@ -114,6 +122,9 @@ internal fun ControllerSettings(model: MainViewModel, current: DeviceControls, c
         }
         "order" -> OptionsDialog("Channel order", orders, light.order, { dialog = "" }, model::colorOrder)
         "restore" -> OptionsDialog("After power is restored", powerModes, light.powerRestore, { dialog = "" }, model::powerRestore)
+        "transition" -> light.powerTransition?.let {
+            TransitionDialog(it, transitionEffects, { dialog = "" }, model::powerTransition)
+        }
         "type" -> OptionsDialog(
             "Output type", LightType.entries.map { it.label }, type?.ordinal ?: -1,
             { dialog = "" }, { pendingType = it.takeIf { index -> index != type?.ordinal } }
@@ -134,6 +145,44 @@ internal fun ControllerSettings(model: MainViewModel, current: DeviceControls, c
             text = { Text("Apply ${next.label}, switch off the light, and reset channel order. Select the type that matches the connected LEDs.") },
             confirmButton = { TextButton(onClick = { pendingType = null; model.lightType(next) }) { Text("Apply") } },
             dismissButton = { TextButton(onClick = { pendingType = null }) { Text("Cancel") } }
+        )
+    }
+}
+
+@Composable
+private fun TransitionDialog(
+    previous: PowerTransition,
+    effects: List<String>,
+    close: () -> Unit,
+    apply: (PowerTransition) -> Unit
+) {
+    val speeds = listOf("Slow", "Medium", "Fast")
+    var effect by rememberSaveable { mutableStateOf(previous.effect) }
+    var speed by rememberSaveable { mutableStateOf(previous.speed) }
+    var pixels by rememberSaveable { mutableStateOf(previous.pixels.toString()) }
+    var option by rememberSaveable { mutableStateOf("") }
+    val setting = PowerTransition.fromWire(effect, speed, pixels.toIntOrNull() ?: 0)
+    when (option) {
+        "effect" -> OptionsDialog("Effect", effects, effect - 1, { option = "" }) { effect = it + 1 }
+        "speed" -> OptionsDialog("Speed", speeds, speed - 1, { option = "" }) { speed = it + 1 }
+        else -> AlertDialog(
+            onDismissRequest = close,
+            title = { Text("Power transition") },
+            text = {
+                Column {
+                    SettingsRow("Effect", effects[effect - 1]) { option = "effect" }
+                    SettingsRow("Speed", speeds[speed - 1]) { option = "speed" }
+                    OutlinedTextField(
+                        pixels, { if (it.length <= 3 && it.all(Char::isDigit)) pixels = it },
+                        label = { Text("Transition pixels (1–600)") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                }
+            },
+            confirmButton = {
+                TextButton(enabled = setting != null, onClick = { setting?.let(apply); close() }) { Text("Apply") }
+            },
+            dismissButton = { TextButton(onClick = close) { Text("Cancel") } }
         )
     }
 }

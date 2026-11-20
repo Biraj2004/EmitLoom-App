@@ -3,6 +3,8 @@
 package com.emitloom.app
 
 import com.emitloom.app.model.ColorRgb
+import com.emitloom.app.model.ColorStep
+import com.emitloom.app.model.PowerTransition
 import com.emitloom.app.model.ControllerDevice
 import com.emitloom.app.model.LightMode
 import com.emitloom.app.model.LightState
@@ -16,6 +18,21 @@ import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ControllerProtocolTest {
+    @Test
+    fun colorSequenceStepValidatesHexAndDuration() {
+        assertEquals(ColorStep(ColorRgb(10, 20, 30), 120), ColorStep.parse("#0A141E", "120"))
+        assertNull(ColorStep.parse("#0A141E", "121"))
+        assertNull(ColorStep.parse("#BOGUS", "2"))
+    }
+
+    @Test
+    fun powerTransitionEncodesPixelCountInBigEndian() {
+        val setting = PowerTransition.fromWire(4, 3, 600)!!
+        assertArrayEquals(bytes(0x53, 0x08, 0, 1, 0, 5, 1, 4, 3, 2, 88),
+            ControllerProtocol(ControllerProfile.FRAMED).powerTransition(setting))
+        assertNull(ControllerProtocol(ControllerProfile.COMPACT).powerTransition(setting))
+        assertNull(PowerTransition.fromWire(1, 1, 601))
+    }
     private fun bytes(vararg values: Int) = values.map(Int::toByte).toByteArray()
 
     @Test

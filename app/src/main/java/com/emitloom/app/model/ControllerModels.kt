@@ -43,8 +43,21 @@ data class LightState(
     val order: Int = 0,
     val firmware: String = "",
     val powerRestore: Int = 0,
-    val coexist: Boolean = false
+    val coexist: Boolean = false,
+    val powerTransition: PowerTransition? = null
 )
+
+data class PowerTransition(val effect: Int, val speed: Int, val pixels: Int) {
+    init {
+        require(effect in 1..4 && speed in 1..3 && pixels in 1..600)
+    }
+
+    companion object {
+        fun fromWire(effect: Int, speed: Int, pixels: Int): PowerTransition? =
+            if (effect in 1..4 && speed in 1..3 && pixels in 1..600) PowerTransition(effect, speed, pixels)
+            else null
+    }
+}
 
 enum class LightType(val id: Int, val label: String, val order: String) {
     PWM_MONO(1, "PWM · Single color", ""), SPI_MONO(2, "SPI · Single color", "123"),

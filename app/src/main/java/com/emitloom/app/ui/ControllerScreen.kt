@@ -279,6 +279,7 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
         }
 
         if (page == ControlPage.LOOKS) {
+            if (rgb) item { SequencePanel(model, light.color) }
             val deviceLooks = looks.filter { it.address == device.address }
             item {
                 ControlPanel {
