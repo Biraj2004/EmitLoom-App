@@ -1,0 +1,7 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 22 64 64" role="img" aria-label="EmitLoom launcher artwork">
+  <rect x="22" y="22" width="64" height="64" rx="16" fill="#101514"/>
+  <path fill="#293c35" d="M32 36Q32 30 38 30H70Q76 30 76 36V72Q76 78 70 78H38Q32 78 32 72Z"/>
+  <path fill="#9de6c3" d="M40 38H51V49H40ZM40 53H51V64H40ZM40 68H51V72H40Z"/>
+  <path fill="#8fdaee" d="M55 38H66V49H55Z"/>
+  <path fill="#f5d6a3" d="M55 53H66V64H55Z"/>
+</svg>

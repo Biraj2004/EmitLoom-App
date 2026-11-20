@@ -33,23 +33,23 @@ Expect `com.emitloom.app`, the label `EmitLoom`, and version `1.0.0`. Install th
 ## Publish on GitHub
 
 1. Confirm the right to publish the included source and assets, and clear the release name in the intended markets.
-2. Initialize Git locally and review the staged paths. Include the Gradle wrapper and the source, docs, and notice files. Keep reference binaries, extracted resources, research tools, signing files, and APKs outside Git history.
+2. Review the branch and its tracked paths. Include the Gradle wrapper and the source, docs, and notice files. Keep reference binaries, extracted resources, research tools, signing files, and APKs outside Git history.
 3. Create an empty GitHub repository and push the reviewed source. Check the Android CI workflow after the push.
 4. Tag the tested source `v1.0.0` and create a GitHub Release for that tag. Attach the verified APK and list the SHA-256 and hardware tested. Keep the corresponding source accessible beside the binary under the AGPL.
 
 ```powershell
-git init -b main
-git add -- .gitattributes .gitignore .github LICENSE README.md docs gradle gradle.properties gradlew gradlew.bat build.gradle.kts settings.gradle.kts app
-git update-index --chmod=+x gradlew
-git diff --cached --name-only
+git status --short --branch
+git log --oneline
+git ls-files
 ```
 
 After reviewing the staged paths and creating the empty remote, replace the example URL with the repository URL from GitHub.
 
 ```powershell
-git commit -m "Initial EmitLoom source"
 git remote add origin 'https://github.com/YOUR_ACCOUNT/EmitLoom.git'
 git push -u origin main
 ```
 
 Use the same tested commit for the source tag and the bundled release APK.
+
+Suggested GitHub topics are `android`, `kotlin`, `jetpack-compose`, `bluetooth-low-energy`, and `led-controller`.

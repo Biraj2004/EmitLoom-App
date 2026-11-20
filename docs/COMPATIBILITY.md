@@ -15,12 +15,13 @@ Commands use GATT service `FFE0` and characteristic `FFE1`. The SP63xE/SP64xE pr
 
 - One connected controller at a time. Saved controllers and looks remain available between sessions.
 - The power timer runs on the phone and depends on the active connection and process. It does not program a controller schedule.
-- Device-specific DIY editors, multi-controller groups, Wi-Fi and mesh provisioning, network control, local music-file playback, and firmware updates are outside this release.
+- The color-sequence editor sends commands from the phone to one connected RGB output. Controller-stored DIY effects and pixel-layout editors require additional model-specific protocol evidence.
+- Multi-controller groups, Wi-Fi and mesh provisioning, network control, music-file playback, and firmware updates remain outside the implemented scope.
 - The compatibility list comes from protocol evidence and packet tests. Firmware variants, Bluetooth behavior, and physical LED output require hands-on verification.
 
 ## Hardware verification
 
-Record the Android version, controller model and firmware, and output configuration. Test scan, connect, status read, power, brightness, and color or white as applicable. Verify that rapid slider changes finish on the selected value. Run a pattern, reconnect, and verify that the displayed state matches the lights. Test the remaining controls shown for that model, including both outputs on SP601E.
+Record the Android version, controller model and firmware, and output configuration. Test scan, connect, status read, power, brightness, and color or white as applicable. Verify that rapid slider changes finish on the selected value. Run a pattern, reconnect, and verify that the displayed state matches the lights. For RGB, play a sequence once and in a loop, then switch outputs or background the app and confirm playback stops. If the device reports a power transition, apply a setting, reconnect, and check the reported configuration and physical behavior. Test both outputs on SP601E.
 
 ## Protocol references
 
