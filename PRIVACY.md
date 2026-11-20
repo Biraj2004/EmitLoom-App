@@ -1,0 +1,23 @@
+# Privacy notice
+
+This notice covers the EmitLoom Android app.
+
+## Data and permissions
+
+| Data or permission | How EmitLoom uses it |
+| --- | --- |
+| Bluetooth and Nearby devices | Discover compatible controllers and exchange lighting commands and status with the selected controller over Bluetooth Low Energy. |
+| Location on Android 11 and earlier | Enable Bluetooth scanning under Android's older permission model. EmitLoom does not request coordinates or retain a location history. |
+| Microphone | When you start phone microphone sync and grant permission, the app reads samples in memory to estimate volume, which it uses to control brightness. It does not save or transmit the audio. |
+| Saved settings | Controller addresses and display names, saved looks, color sequences, and the list/grid choice are stored in the app's local preferences. |
+
+The app does not request Internet access or use analytics or an account service. App preferences are excluded from the configured Android backup and device-transfer rules.
+
+## Manage your data
+
+- Use **Forget controller** to remove the saved controller and its associated looks.
+- Delete individual looks and sequences from **Looks**.
+- Clear EmitLoom's app storage in Android settings or uninstall the app to remove its local data.
+- Change Bluetooth, location, and microphone access in Android app permissions.
+
+Public GitHub issues and pull requests are separate from the Android app. Redact controller addresses, personal information, credentials, and unrelated log entries when sharing a report.

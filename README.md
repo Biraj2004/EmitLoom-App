@@ -43,6 +43,14 @@ On macOS or Linux use `./gradlew`. The debug APK uses Android's local debug key.
 
 EmitLoom stores controller addresses, display names, looks, and color sequences on the phone. Bluetooth is used to discover and control devices. Phone microphone sync processes audio in memory to calculate volume and discards the samples. EmitLoom has no Internet permission, account service, or analytics. Use **Forget controller** to remove a controller and its saved looks, or clear the app's storage in Android settings to remove all local data.
 
+[Privacy notice](PRIVACY.md)
+
+## Project participation
+
+[Contributing](CONTRIBUTING.md) · [Code of conduct](CODE_OF_CONDUCT.md) · [Security policy](SECURITY.md)
+
 ## License
 
 EmitLoom is licensed under the [GNU Affero General Public License, version 3 only](LICENSE). [Third-party notices](app/src/main/assets/licenses/NOTICE.txt) cover bundled dependencies. Hardware and vendor names identify compatibility. EmitLoom is an independent project with no vendor affiliation.
+
+[Legal and licensing notes](LEGAL.md)
