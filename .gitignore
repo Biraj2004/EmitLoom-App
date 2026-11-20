@@ -25,6 +25,7 @@
 /.*-signing/
 
 # Private compatibility research and local analysis tools
+/docs/*.local.md
 /apk-re/
 /rea_references/
 /rea_skill.md

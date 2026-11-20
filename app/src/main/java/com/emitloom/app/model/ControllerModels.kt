@@ -8,9 +8,12 @@ data class ColorRgb(val red: Int, val green: Int, val blue: Int) {
     fun toHex(): String = "#%02X%02X%02X".format(red, green, blue)
 
     companion object {
+        private val rgbHex = Regex("[0-9a-fA-F]{6}")
+
         fun fromHex(value: String): ColorRgb? {
-            val hex = value.trim().removePrefix("#").takeIf { it.length == 6 } ?: return null
-            val rgb = hex.toIntOrNull(16)?.takeIf { it in 0..0xffffff } ?: return null
+            val hex = value.trim().removePrefix("#")
+            if (!rgbHex.matches(hex)) return null
+            val rgb = hex.toInt(16)
             return ColorRgb(rgb shr 16, rgb shr 8 and 255, rgb and 255)
         }
     }

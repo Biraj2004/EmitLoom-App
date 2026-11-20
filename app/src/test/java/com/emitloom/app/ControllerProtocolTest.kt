@@ -19,6 +19,42 @@ import org.junit.Test
 
 class ControllerProtocolTest {
     @Test
+    fun hexColorsRequireSixAsciiHexDigits() {
+        assertEquals(ColorRgb(0xab, 0xcd, 0xef), ColorRgb.fromHex(" #aBcDeF "))
+        assertNull(ColorRgb.fromHex("+12345"))
+        assertNull(ColorRgb.fromHex("-00000"))
+        assertNull(ColorRgb.fromHex("１２３４５６"))
+        assertNull(ColorStep.parse("#+12345", "2"))
+    }
+
+    @Test
+    fun framedWhiteBrightnessAndWarmthUseSeparateCommands() {
+        val protocol = ControllerProtocol(ControllerProfile.FRAMED)
+        val packets = protocol.white(channel = 0, level = 128, switchMode = true)
+        assertEquals(2, packets.size)
+        assertArrayEquals(bytes(0x53, 0x53, 0, 1, 0, 2, 2, 1), packets[0])
+        assertArrayEquals(bytes(0x53, 0x51, 0, 1, 0, 2, 1, 128), packets[1])
+        assertArrayEquals(bytes(0x53, 0x61, 0, 1, 0, 2, 255, 0), protocol.temperature(255, 0))
+        assertNull(ControllerProtocol(ControllerProfile.DUAL).temperature(255, 0))
+    }
+
+    @Test
+    fun dualOutputStatusAndWritesKeepChannelsIndependent() {
+        val decoder = StatusDecoder(ControllerProfile.DUAL)
+        val status = bytes(0x53, 0x43, 1, 23, 23) +
+            bytes(1, 0x19, 0, 42, 4, 25, 1, 255, 0, 0, 6) +
+            bytes(0, 0x19, 2, 191, 8, 30, 0, 0, 0, 255, 9) + bytes(0)
+        val outputs = decoder.accept(status)!!
+        assertEquals(2, outputs.size)
+        assertEquals(listOf(true, false), outputs.map { it.power })
+        assertEquals(listOf(42, 191), outputs.map { it.brightness })
+        assertEquals(listOf(ColorRgb(255, 0, 0), ColorRgb(0, 0, 255)), outputs.map { it.color })
+        val protocol = ControllerProtocol(ControllerProfile.DUAL)
+        assertArrayEquals(bytes(0xAA, 0x25, 2, 0, 42), protocol.brightness(0, 42))
+        assertArrayEquals(bytes(0xAA, 0x25, 2, 1, 191), protocol.brightness(1, 191))
+    }
+
+    @Test
     fun colorSequenceStepValidatesHexAndDuration() {
         assertEquals(ColorStep(ColorRgb(10, 20, 30), 120), ColorStep.parse("#0A141E", "120"))
         assertNull(ColorStep.parse("#0A141E", "121"))
