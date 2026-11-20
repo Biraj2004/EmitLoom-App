@@ -30,6 +30,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -41,6 +42,11 @@ import com.emitloom.app.model.ColorRgb
 import com.emitloom.app.model.ColorSequence
 import com.emitloom.app.model.ColorStep
 import com.emitloom.app.ui.viewmodel.MainViewModel
+
+private val SequenceFieldsSaver = listSaver<List<String>, String>(
+    save = { it },
+    restore = { it.toList() }
+)
 
 @Composable
 internal fun SequencePanel(model: MainViewModel, color: ColorRgb) {
@@ -99,11 +105,11 @@ private fun SequenceEditor(
 ) {
     var name by rememberSaveable(existing?.id) { mutableStateOf(existing?.name.orEmpty()) }
     var loop by rememberSaveable(existing?.id) { mutableStateOf(existing?.loop ?: false) }
-    var colors by rememberSaveable(existing?.id) {
-        mutableStateOf(ArrayList(existing?.steps?.map { it.color.toHex() } ?: listOf(color.toHex(), "#FFFFFF")))
+    var colors by rememberSaveable(existing?.id, stateSaver = SequenceFieldsSaver) {
+        mutableStateOf(existing?.steps?.map { it.color.toHex() } ?: listOf(color.toHex(), "#FFFFFF"))
     }
-    var holds by rememberSaveable(existing?.id) {
-        mutableStateOf(ArrayList(existing?.steps?.map { it.seconds.toString() } ?: listOf("2", "2")))
+    var holds by rememberSaveable(existing?.id, stateSaver = SequenceFieldsSaver) {
+        mutableStateOf(existing?.steps?.map { it.seconds.toString() } ?: listOf("2", "2"))
     }
     val steps = colors.zip(holds) { hex, hold -> ColorStep.parse(hex, hold) }
     AlertDialog(
@@ -118,27 +124,31 @@ private fun SequenceEditor(
                         val rgb = ColorRgb.fromHex(colors[index])
                         Box(Modifier.size(16.dp).background(rgb?.let { Color(it.red, it.green, it.blue) } ?: PanelRaised, CircleShape))
                         OutlinedTextField(
-                            colors[index], { if (it.length <= 7) colors = ArrayList(colors).apply { set(index, it) } },
+                            colors[index], { if (it.length <= 7) colors = colors.mapIndexed { i, value -> if (i == index) it else value } },
                             Modifier.weight(1f), label = { Text("Color ${index + 1}") }, singleLine = true,
                             isError = rgb == null
                         )
                         OutlinedTextField(
-                            holds[index], { if (it.length <= 3 && it.all(Char::isDigit)) holds = ArrayList(holds).apply { set(index, it) } },
+                            holds[index], { hold ->
+                                if (hold.length <= 3 && hold.all(Char::isDigit)) {
+                                    holds = holds.mapIndexed { i, value -> if (i == index) hold else value }
+                                }
+                            },
                             Modifier.weight(.65f), label = { Text("Sec") }, singleLine = true,
                             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
                             isError = (holds[index].toIntOrNull() ?: 0) !in 1..120
                         )
                         if (colors.size > 2) {
                             IconButton(onClick = {
-                                colors = ArrayList(colors).apply { removeAt(index) }
-                                holds = ArrayList(holds).apply { removeAt(index) }
+                                colors = colors.filterIndexed { i, _ -> i != index }
+                                holds = holds.filterIndexed { i, _ -> i != index }
                             }) { Icon(Icons.Rounded.DeleteOutline, "Remove step ${index + 1}") }
                         }
                     }
                 }
                 TextButton(enabled = colors.size < 12, onClick = {
-                    colors = ArrayList(colors + color.toHex())
-                    holds = ArrayList(holds + "2")
+                    colors = colors + color.toHex()
+                    holds = holds + "2"
                 }) { Text("Add color") }
                 ToggleRow("Loop sequence", loop) { loop = it }
             }
