@@ -9,15 +9,33 @@ import com.emitloom.app.model.ControllerDevice
 import com.emitloom.app.model.LightMode
 import com.emitloom.app.model.LightState
 import com.emitloom.app.model.effects
+import com.emitloom.app.model.hasControllerMic
+import com.emitloom.app.model.hasWhite
 import com.emitloom.app.protocol.ControllerProfile
 import com.emitloom.app.protocol.ControllerProtocol
 import com.emitloom.app.protocol.StatusDecoder
+import com.emitloom.app.ui.viewmodel.demoController
 import org.junit.Assert.assertArrayEquals
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Test
 
 class ControllerProtocolTest {
+    @Test
+    fun demoMatchesSp621eCapabilities() {
+        val demo = demoController()
+        assertEquals("SP621E", demo.device.model)
+        assertEquals(ControllerProfile.A0, demo.device.profile)
+        assertEquals(demo.device.profile, ControllerProfile.identify(demo.device.model, null))
+        assertEquals(1, demo.outputs.size)
+        assertEquals(ControllerProfile.A0.solidEffect, demo.light.effect)
+        assertEquals("Rainbow Meteor", demo.device.effects(demo.light, LightMode.EFFECTS)[1].name)
+        assertFalse(demo.device.hasWhite(demo.light))
+        assertFalse(demo.device.hasControllerMic())
+        assertNull(demo.light.powerTransition)
+    }
+
     @Test
     fun hexColorsRequireSixAsciiHexDigits() {
         assertEquals(ColorRgb(0xab, 0xcd, 0xef), ColorRgb.fromHex(" #aBcDeF "))

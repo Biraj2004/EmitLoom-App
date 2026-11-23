@@ -6,6 +6,8 @@ The **Android Release** workflow runs on pushes to `main` and can also be run ma
 
 The workflow increments the patch of the highest `vMAJOR.MINOR.PATCH` tag. With no tags, the first release is `v1.0.1` because the initial local APK is `v1.0.0`. Android's version code also increases. Release notes list up to ten commit summaries, link to the full comparison, and include the APK's SHA-256. A failed build leaves the previous release available. Retry from Actions using the current `main` commit.
 
+GitHub publishes `emitloom-v<version>-release.apk`. The corresponding [local demo build](WORKFLOWS.md#try-a-demo-controller) uses the same version with the filename `emitloom-v<version>-demo.apk`. Build the demo with the intended release's `emitloomVersionName` and `emitloomVersionCode`. GitHub Actions builds and uploads the release variant only.
+
 ### One-time signing setup
 
 Open **Settings → Secrets and variables → Actions** in the repository and add these repository secrets using the existing release key. Reusing the key lets users update existing installations.

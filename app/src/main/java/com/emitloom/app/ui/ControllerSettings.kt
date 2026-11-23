@@ -70,10 +70,12 @@ internal fun ControllerSettings(model: MainViewModel, current: DeviceControls, c
     ) {
         item {
             ControlPanel {
-                SectionTitle(controller?.name ?: device.model)
-                Text(device.model, color = TextMuted)
+                SectionTitle(current.demoName ?: controller?.name ?: device.model)
+                Text(if (current.demoName != null) "Simulated ${device.model}" else device.model, color = TextMuted)
                 if (light.firmware.isNotBlank()) Text("Firmware ${light.firmware}", color = TextMuted)
-                SettingsRow("Display name", "Saved on this phone", onClick = { dialog = "rename" })
+                SettingsRow("Display name", if (current.demoName != null) "Current demo session" else "Saved on this phone") {
+                    dialog = "rename"
+                }
             }
         }
         if (type != null || orders.isNotEmpty() || scene) {
@@ -102,22 +104,22 @@ internal fun ControllerSettings(model: MainViewModel, current: DeviceControls, c
         }
         item {
             ControlPanel {
-                SectionTitle("Bluetooth")
+                SectionTitle(if (current.demoName != null) "Demo session" else "Bluetooth")
                 FilledTonalButton(onClick = model::refresh) {
                     Icon(Icons.Rounded.Refresh, null)
                     Text("Read controller status", Modifier.padding(start = 8.dp))
                 }
                 FilledTonalButton(onClick = model::disconnect) {
                     Icon(Icons.Rounded.BluetoothDisabled, null)
-                    Text("Disconnect", Modifier.padding(start = 8.dp))
+                    Text(if (current.demoName != null) "End demo" else "Disconnect", Modifier.padding(start = 8.dp))
                 }
-                TextButton(onClick = { dialog = "forget" }) { Text("Forget controller") }
+                if (current.demoName == null) TextButton(onClick = { dialog = "forget" }) { Text("Forget controller") }
             }
         }
     }
 
     when (dialog) {
-        "rename" -> NameDialog("Rename controller", controller?.name.orEmpty(), { dialog = "" }) {
+        "rename" -> NameDialog("Rename controller", current.demoName ?: controller?.name.orEmpty(), { dialog = "" }) {
             model.rename(device.address, it)
         }
         "order" -> OptionsDialog("Channel order", orders, light.order, { dialog = "" }, model::colorOrder)

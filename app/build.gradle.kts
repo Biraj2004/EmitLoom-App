@@ -11,6 +11,7 @@ plugins {
 
 val emitloomVersion = providers.gradleProperty("emitloomVersionName").getOrElse("1.0.0")
 val emitloomVersionCode = providers.gradleProperty("emitloomVersionCode").getOrElse("1").toInt()
+val demoControllerEnabled = providers.gradleProperty("emitloomDemo").getOrElse("false") == "true"
 val licenseAssets = layout.buildDirectory.dir("generated/emitloomLicenseAssets")
 val packageLicense = tasks.register<Copy>("packageProjectLicense") {
     from(rootProject.file("LICENSE"))
@@ -33,6 +34,7 @@ android {
         targetSdk = 35
         versionCode = emitloomVersionCode
         versionName = emitloomVersion
+        buildConfigField("boolean", "DEMO_CONTROLLER", "false")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
@@ -47,6 +49,13 @@ android {
     }
 
     buildTypes {
+        debug {
+            if (demoControllerEnabled) {
+                applicationIdSuffix = ".demo"
+                resValue("string", "app_name", "EmitLoom Demo")
+                buildConfigField("boolean", "DEMO_CONTROLLER", "true")
+            }
+        }
         release {
             isMinifyEnabled = true
             isShrinkResources = true
@@ -62,6 +71,7 @@ android {
         jvmTarget = "21"
     }
     buildFeatures {
+        buildConfig = true
         compose = true
     }
     sourceSets.getByName("main").assets.srcDir(licenseAssets)
@@ -106,28 +116,34 @@ tasks.matching { it.name == "packageRelease" || it.name == "validateSigningRelea
     dependsOn(validateEmitLoomSigning)
 }
 
-androidComponents.onVariants(androidComponents.selector().withBuildType("release")) { variant ->
+androidComponents.onVariants { variant ->
+    val apkKind = when (variant.buildType) {
+        "release" -> "release"
+        "debug" -> if (demoControllerEnabled) "demo" else return@onVariants
+        else -> return@onVariants
+    }
     val apkDirectory = variant.artifacts.get(SingleArtifact.APK)
     val loader = variant.artifacts.getBuiltArtifactsLoader()
-    tasks.matching { it.name == "assembleRelease" }.configureEach {
+    val assembleTask = "assemble${variant.name.replaceFirstChar(Char::uppercaseChar)}"
+    tasks.matching { it.name == assembleTask }.configureEach {
         doLast {
             val apk = checkNotNull(loader.load(apkDirectory.get())?.elements?.singleOrNull()) {
-                "Expected exactly one release APK."
+                "Expected exactly one $apkKind APK."
             }
             check(apk.versionName == emitloomVersion && apk.versionCode == emitloomVersionCode) {
-                "Unexpected release APK version."
+                "Unexpected $apkKind APK version."
             }
             val exportDir = rootProject.file("apk-export").toPath()
             Files.createDirectories(exportDir)
-            val destination = exportDir.resolve("emitloom-v$emitloomVersion-release.apk")
-            val staging = Files.createTempFile(exportDir, ".emitloom-release-", ".apk")
+            val destination = exportDir.resolve("emitloom-v$emitloomVersion-$apkKind.apk")
+            val staging = Files.createTempFile(exportDir, ".emitloom-$apkKind-", ".apk")
             try {
                 Files.copy(File(apk.outputFile).toPath(), staging, StandardCopyOption.REPLACE_EXISTING)
                 Files.move(staging, destination, StandardCopyOption.ATOMIC_MOVE, StandardCopyOption.REPLACE_EXISTING)
             } finally {
                 Files.deleteIfExists(staging)
             }
-            logger.lifecycle("EmitLoom release exported to $destination")
+            logger.lifecycle("EmitLoom $apkKind exported to $destination")
         }
     }
 }

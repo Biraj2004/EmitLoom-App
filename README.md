@@ -12,15 +12,26 @@ EmitLoom is a native Android app for controlling compatible LED lights over Blue
 ## What you can do
 
 - Scan for nearby controllers, reconnect to saved devices, and rename them locally. Switch between list and grid views, with the choice saved on the phone.
-- Set power, solid RGB color and brightness. Supported outputs also expose white brightness and color temperature.
+- Drag the color wheel or tap a preset to pick RGB colors. Adjust brightness independently and see the result on a 24-LED sample strip. Supported outputs also expose white brightness and warmth.
 - Browse controller effects, adjust speed, and use the hardware microphone on models that provide one. Phone microphone sync pulses RGB brightness while the app is open.
 - Save and recall looks on your phone. SP601E also exposes existing controller scene slots and separate output controls.
 - Create color sequences with individual hold times and optional looping. Play them in the app on a connected RGB output.
 - Set a one-shot power timer while connected. Some models expose transition effects, output configuration, and power-restore settings.
 
-The initial compatibility targets are SP601E, SP611E, SP617E, SP620E, SP621E, SP613E, SP614E, SP623E, SP624E, and the direct-BLE SP63xE/SP64xE family. Firmware and output configuration can affect available controls. See the [compatibility notes](docs/COMPATIBILITY.md) for verification status and current scope.
-
 [Using the controls](docs/WORKFLOWS.md) · [Build and publish](docs/RELEASING.md)
+
+## Supported controller models
+
+**SP621E** is the primary target and the model used by the temporary demo. EmitLoom also implements direct Bluetooth profiles for the models below.
+
+| Profile | Models | Available controls vary by model |
+| --- | --- | --- |
+| A0 | **SP621E**, SP611E, SP617E, SP620E | Addressable RGB effects. SP617E also exposes white brightness. |
+| Compact | SP613E, SP614E, SP623E, SP624E | PWM effects. SP614E and SP624E also expose white brightness. |
+| Dual output | SP601E | Separate output controls and recall of existing controller scenes. |
+| SP63xE/SP64xE | SP630E–SP639E, SP63AE, SP641E–SP649E, SP64AE | RGB, white, and effects depend on the reported output configuration. |
+
+This list reflects protocol support in the app. Hands-on verification remains pending, and firmware and strip configuration can affect which controls are available. [Compatibility and hardware checks](docs/COMPATIBILITY.md)
 
 ## Install and connect
 
@@ -38,6 +49,8 @@ Install JDK 21 and Android SDK Platform 35 with Build Tools 35.0.0. Set `JAVA_HO
 ```
 
 On macOS or Linux use `./gradlew`. The debug APK uses Android's local debug key. For release signing and publication, see the [release guide](docs/RELEASING.md).
+
+To try the SP621E controls without nearby hardware, see the [temporary demo build](docs/WORKFLOWS.md#try-a-demo-controller).
 
 ## Data and permissions
 

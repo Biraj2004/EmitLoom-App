@@ -1,6 +1,10 @@
 // SPDX-License-Identifier: AGPL-3.0-only
 
-@file:OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class, androidx.compose.foundation.layout.ExperimentalLayoutApi::class)
+@file:OptIn(
+    androidx.compose.material3.ExperimentalMaterial3Api::class,
+    androidx.compose.foundation.layout.ExperimentalLayoutApi::class,
+    androidx.compose.foundation.ExperimentalFoundationApi::class
+)
 
 package com.emitloom.app.ui
 
@@ -29,7 +33,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
-import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Palette
@@ -73,6 +76,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.KeyboardType
@@ -88,6 +92,7 @@ import com.emitloom.app.model.hasWhite
 import com.emitloom.app.model.lightType
 import com.emitloom.app.protocol.ControllerProfile
 import com.emitloom.app.ui.components.ColorWheel
+import com.emitloom.app.ui.components.StripPreview
 import com.emitloom.app.ui.viewmodel.ActiveTimer
 import com.emitloom.app.ui.viewmodel.DeviceControls
 import com.emitloom.app.ui.viewmodel.MainViewModel
@@ -98,6 +103,13 @@ private enum class ControlPage(val label: String, val icon: ImageVector) {
     COLOR("Color", Icons.Rounded.Palette), EFFECTS("Effects", Icons.Rounded.PlayArrow),
     SOUND("Sound", Icons.Rounded.GraphicEq), LOOKS("Looks", Icons.Rounded.StarBorder)
 }
+
+private val quickColors = listOf(
+    "Red" to ColorRgb(255, 77, 73), "Amber" to ColorRgb(255, 170, 53),
+    "Yellow" to ColorRgb(245, 232, 75), "Green" to ColorRgb(53, 230, 138),
+    "Blue" to ColorRgb(64, 189, 255), "Violet" to ColorRgb(133, 103, 255),
+    "White" to ColorRgb(255, 255, 255)
+)
 
 @Composable
 internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onSettings: () -> Unit, onPhoneMic: () -> Unit) {
@@ -129,7 +141,8 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
     } else if (whiteEffects && scene) LightMode.WHITE_EFFECTS else LightMode.EFFECTS
     val showDeviceMic = device.hasControllerMic()
     val effectItems = remember(device, light.lightType, effectMode) { device.effects(light, effectMode) }
-    val filteredEffects = effectItems.filter { it.name.contains(query, ignoreCase = true) }
+    val filteredEffects = remember(effectItems, query) { effectItems.filter { it.name.contains(query, ignoreCase = true) } }
+    val stripEffects = remember(device, light.lightType, light.mode) { device.effects(light, light.mode) }
     val isEffectPage = page == ControlPage.EFFECTS || page == ControlPage.SOUND && showDeviceMic
     val activeEffect = light.mode == effectMode
     val spi = device.lightType(light)?.spi == true
@@ -139,6 +152,11 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
         contentPadding = PaddingValues(start = 20.dp, end = 20.dp, top = 12.dp, bottom = 32.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
+        stickyHeader {
+            Box(Modifier.fillMaxWidth().background(Ink).padding(bottom = 4.dp)) {
+                StripPreview(light, stripEffects, mic)
+            }
+        }
         item {
             PowerPanel(current, timer, model::power, onSettings) { dialog = "timer" }
         }
@@ -191,21 +209,20 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
                                 SectionTitle("Solid color")
                                 Text(light.color.toHex(), style = MaterialTheme.typography.bodyMedium, color = TextMuted)
                             }
-                            IconButton(onClick = { dialog = "hex" }) { Icon(Icons.Rounded.Edit, "Enter a hex color") }
+                            TextButton(onClick = { dialog = "hex" }) { Text("Enter hex") }
                         }
+                        LevelSlider("Brightness", light.brightness, 0..255, model::solidBrightness, percent = true)
                         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-                            ColorWheel(light.color, model::setColor, Modifier.widthIn(max = 280.dp).fillMaxWidth())
+                            ColorWheel(light.color, model::setColor, Modifier.widthIn(max = 244.dp).fillMaxWidth())
                         }
-                        val quickColors = listOf(
-                            ColorRgb(255, 77, 73), ColorRgb(255, 170, 53), ColorRgb(245, 232, 75),
-                            ColorRgb(53, 230, 138), ColorRgb(64, 189, 255), ColorRgb(133, 103, 255), ColorRgb(255, 255, 255)
-                        )
-                        FlowRow(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-                            quickColors.forEach { color -> ColorSwatch(color, light.color == color) { model.setColor(color) } }
+                        FlowRow(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.Center) {
+                            quickColors.forEach { (name, color) ->
+                                ColorSwatch(name, color, light.color == color) { model.setColor(color) }
+                            }
                         }
-                        if (light.mode == LightMode.COLOR) {
-                            LevelSlider("Brightness", light.brightness, 0..255, { model.brightness(it) }, percent = true)
-                        } else FilledTonalButton(onClick = { model.setColor(light.color) }) { Text("Apply solid color") }
+                        if (light.mode != LightMode.COLOR) {
+                            FilledTonalButton(onClick = { model.setColor(light.color) }) { Text("Apply solid color") }
+                        }
                     }
                 }
             }
@@ -231,7 +248,10 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
 
         if (isEffectPage) {
             if (scene && rgb && white) item { ChoicePair("Color effects", "White effects", whiteEffects) { whiteEffects = it } }
-            if (page == ControlPage.SOUND) item { SectionTitle("Controller microphone") }
+            if (page == ControlPage.SOUND) item {
+                SectionTitle("Controller microphone")
+                if (current.demoName != null) Text("Sample sound patterns", color = TextMuted)
+            }
             if (activeEffect) {
                 item {
                     ControlPanel {
@@ -362,7 +382,10 @@ private fun PowerPanel(
             }
             Column(Modifier.weight(1f)) {
                 Text(if (light.power) "Light on" else "Light off", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.SemiBold)
-                Text("${current.device.model} · Connected", color = TextMuted, style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    if (current.demoName != null) "Simulated ${current.device.model}" else "${current.device.model} · Connected",
+                    color = TextMuted, style = MaterialTheme.typography.bodyMedium
+                )
             }
             IconButton(onClick = onSettings) { Icon(Icons.Rounded.Settings, "Controller settings") }
         }
@@ -439,14 +462,17 @@ private fun EffectRow(name: String, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-private fun ColorSwatch(color: ColorRgb, selected: Boolean, onClick: () -> Unit) {
+private fun ColorSwatch(name: String, color: ColorRgb, isSelected: Boolean, onClick: () -> Unit) {
     Box(
         Modifier.size(48.dp).clip(CircleShape).clickable(role = Role.Button, onClick = onClick)
-            .semantics { contentDescription = color.toHex() },
+            .semantics {
+                contentDescription = name
+                selected = isSelected
+            },
         contentAlignment = Alignment.Center
     ) {
-        val shade = Modifier.size(32.dp).background(color.asColor(), CircleShape)
-        Box(if (selected) shade.border(2.dp, TextPrimary, CircleShape) else shade)
+        if (isSelected) Box(Modifier.size(40.dp).border(2.dp, TextPrimary, CircleShape))
+        Box(Modifier.size(30.dp).background(color.asColor(), CircleShape))
     }
 }
 
@@ -513,4 +539,4 @@ private fun remainingTime(timer: ActiveTimer): String {
     return "%d:%02d".format(seconds / 60, seconds % 60)
 }
 
-private fun ColorRgb.asColor() = Color(red, green, blue)
+internal fun ColorRgb.asColor() = Color(red, green, blue)

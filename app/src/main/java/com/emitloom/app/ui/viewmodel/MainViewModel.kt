@@ -6,6 +6,7 @@ import android.app.Application
 import android.os.SystemClock
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
+import com.emitloom.app.BuildConfig
 import com.emitloom.app.audio.AudioReactiveEngine
 import com.emitloom.app.bluetooth.BleManager
 import com.emitloom.app.bluetooth.ScanEntry
@@ -39,7 +40,12 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.util.UUID
 
-data class DeviceControls(val device: ControllerDevice, val outputs: List<LightState>, val channel: Int = 0) {
+data class DeviceControls(
+    val device: ControllerDevice,
+    val outputs: List<LightState>,
+    val channel: Int = 0,
+    val demoName: String? = null
+) {
     val light: LightState get() = outputs[channel]
 }
 
@@ -79,6 +85,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     init {
         viewModelScope.launch {
             connection.collect { value ->
+                if (_controls.value?.demoName != null) return@collect
                 val device = value.device
                 if (device == null || value.outputs.isEmpty()) {
                     _controls.value = null
@@ -106,6 +113,16 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun stopScan() = ble.stopScan()
+
+    fun connectDemo() {
+        if (!BuildConfig.DEMO_CONTROLLER || _controls.value?.demoName != null) return
+        stopScan()
+        disconnect()
+        _looks.value = emptyList()
+        _sequences.value = emptyList()
+        _controls.value = demoController()
+    }
+
     fun connect(entry: ScanEntry) = connect(SavedController(entry.device, entry.name))
 
     fun connect(saved: SavedController) {
@@ -118,20 +135,35 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun disconnect() {
+        val wasDemo = _controls.value?.demoName != null
         stopSequence()
         stopPhoneMic(restore = false)
         cancelTimer()
         _controls.value = null
+        if (wasDemo) {
+            _looks.value = library.looks()
+            _sequences.value = library.sequences()
+        }
+        nameOnConnect = null
         ble.disconnect()
     }
 
     fun rename(address: String, name: String) {
         val label = name.trim().take(40)
         if (label.isEmpty()) return
+        val current = _controls.value
+        if (current?.demoName != null && current.device.address == address) {
+            _controls.value = current.copy(demoName = label)
+            return
+        }
         updateControllers(_controllers.value.map { if (it.device.address == address) it.copy(name = label) else it })
     }
 
     fun forget(address: String) {
+        if (_controls.value?.let { it.demoName != null && it.device.address == address } == true) {
+            disconnect()
+            return
+        }
         if (connection.value.device?.address == address) disconnect()
         updateControllers(_controllers.value.filterNot { it.device.address == address })
         updateLooks(_looks.value.filterNot { it.address == address })
@@ -157,6 +189,21 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             val light = current.light
             protocol.color(current.channel, color, light.brightness, light.mode != LightMode.COLOR) to
                 light.copy(color = color, mode = LightMode.COLOR, effect = protocol.profile.solidEffect)
+        }
+    }
+
+    fun solidBrightness(value: Int) {
+        val level = value.coerceIn(0, 255)
+        change("brightness") { protocol, current ->
+            val light = current.light
+            val channel = current.channel
+            val packets = if (light.mode == LightMode.COLOR) {
+                listOf(protocol.brightness(channel, level))
+            } else {
+                protocol.color(channel, light.color, level) +
+                    listOfNotNull(protocol.brightness(channel, level).takeIf { protocol.profile == ControllerProfile.DUAL })
+            }
+            packets to light.copy(brightness = level, mode = LightMode.COLOR, effect = protocol.profile.solidEffect)
         }
     }
 
@@ -262,14 +309,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val protocol = ControllerProtocol(current.device.profile)
         val scene = protocol.scene(slot) ?: return
         stopSequence()
-        ble.send(listOf(scene, protocol.status()))
+        send(current, listOf(scene, protocol.status()))
     }
 
     fun refresh() {
         val current = _controls.value ?: return
         stopSequence()
         stopPhoneMic()
-        ble.send(listOf(ControllerProtocol(current.device.profile).status()))
+        send(current, listOf(ControllerProtocol(current.device.profile).status()))
+        if (current.demoName != null) showMessage("Demo controller status is current.")
     }
 
     fun saveLook(name: String) {
@@ -350,7 +398,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                     stopPhoneMic(restore = false)
                 }
                 val packet = ControllerProtocol(active.device.profile).power(timer.channel, turnOn)
-                if (ble.send(listOf(packet))) {
+                if (send(active, listOf(packet))) {
                     updateOutput(active, timer.channel, active.outputs[timer.channel].copy(power = turnOn))
                 }
             }
@@ -379,7 +427,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                         _phoneMic.value = level
                         val base = active.light.brightness
                         val output = (base * (0.15f + level * 0.85f)).toInt()
-                        ble.send(listOf(ControllerProtocol(active.device.profile).brightness(active.channel, output)), "phone-mic")
+                        send(active, listOf(ControllerProtocol(active.device.profile).brightness(active.channel, output)), "phone-mic")
                     }
                 }
             } catch (cancelled: CancellationException) {
@@ -431,7 +479,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                             if (!light.power) add(protocol.power(current.channel, true))
                             addAll(protocol.color(current.channel, step.color, light.brightness, light.mode != LightMode.COLOR))
                         }
-                        if (!ble.send(packets, "sequence-${current.channel}".takeIf { light.power && light.mode == LightMode.COLOR })) {
+                        if (!send(current, packets, "sequence-${current.channel}".takeIf { light.power && light.mode == LightMode.COLOR })) {
                             return@launch
                         }
                         updateOutput(current, current.channel, light.copy(
@@ -455,7 +503,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateSequences(sequences: List<ColorSequence>) {
         _sequences.value = sequences
-        library.storeSequences(sequences)
+        if (_controls.value?.demoName == null) library.storeSequences(sequences)
     }
 
     fun showMessage(message: String) { _message.value = message }
@@ -466,8 +514,11 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         stopSequence()
         val (packets, next) = build(ControllerProtocol(current.device.profile), current)
         val coalesce = key?.let { "$it-${current.channel}" }?.takeIf { current.light.mode == next.mode }
-        if (ble.send(packets, coalesce)) updateOutput(current, current.channel, next)
+        if (send(current, packets, coalesce)) updateOutput(current, current.channel, next)
     }
+
+    private fun send(current: DeviceControls, packets: List<ByteArray>, key: String? = null): Boolean =
+        if (current.demoName != null) packets.isNotEmpty() else ble.send(packets, key)
 
     private fun updateOutput(current: DeviceControls, channel: Int, light: LightState) {
         _controls.update { active ->
@@ -484,7 +535,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
 
     private fun updateLooks(looks: List<SavedLook>) {
         _looks.value = looks
-        library.storeLooks(looks)
+        if (_controls.value?.demoName == null) library.storeLooks(looks)
     }
 
     override fun onCleared() {

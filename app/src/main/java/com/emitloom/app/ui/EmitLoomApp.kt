@@ -77,6 +77,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.emitloom.app.bluetooth.DiscoveryState
+import com.emitloom.app.BuildConfig
 import com.emitloom.app.model.SavedController
 import com.emitloom.app.ui.viewmodel.MainViewModel
 
@@ -120,7 +121,7 @@ fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedContr
                     Text(
                         when (page) {
                             Page.DEVICES -> "EmitLoom"
-                            Page.CONTROL -> saved.firstOrNull { it.device == controls?.device }?.name ?: "Controller"
+                            Page.CONTROL -> controls?.demoName ?: saved.firstOrNull { it.device == controls?.device }?.name ?: "Controller"
                             Page.SETTINGS -> "Controller settings"
                         },
                         maxLines = 1,
@@ -160,6 +161,10 @@ fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedContr
                         error = connection.error,
                         onCancelConnection = model::disconnect,
                         onFind = { scanner = true; onScan() },
+                        demoActive = active?.demoName != null,
+                        onDemo = if (BuildConfig.DEMO_CONTROLLER) {
+                            { if (active?.demoName != null) page = Page.CONTROL else model.connectDemo() }
+                        } else null,
                         onOpen = {
                             if (active?.device?.address == it.device.address) page = Page.CONTROL else onConnect(it)
                         }
@@ -189,7 +194,7 @@ fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedContr
             title = { Text("EmitLoom") },
             text = {
                 Column(verticalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Text("Version 1.0.0")
+                    Text("Version ${BuildConfig.VERSION_NAME}")
                     Text("Control supported LED lights over Bluetooth. Your saved controllers and looks stay on this phone.")
                     Text("Licensed under the GNU Affero General Public License v3.0.")
                 }
@@ -209,6 +214,8 @@ private fun DeviceCollection(
     error: String?,
     onCancelConnection: () -> Unit,
     onFind: () -> Unit,
+    demoActive: Boolean,
+    onDemo: (() -> Unit)?,
     onOpen: (SavedController) -> Unit
 ) {
     LazyVerticalGrid(
@@ -226,9 +233,17 @@ private fun DeviceCollection(
                 LedStripIllustration(Modifier.fillMaxWidth().height(86.dp))
                 Text("Your lights", style = MaterialTheme.typography.headlineLarge, fontWeight = FontWeight.SemiBold)
                 Text("Find nearby Bluetooth LED controllers and manage them from one place.", color = TextMuted)
-                Button(onClick = onFind, contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)) {
-                    Icon(Icons.Rounded.Add, null, Modifier.size(20.dp))
-                    Text("Find lights", Modifier.padding(start = 8.dp))
+                Column(horizontalAlignment = Alignment.Start) {
+                    Button(onClick = onFind, contentPadding = PaddingValues(horizontal = 18.dp, vertical = 10.dp)) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(20.dp))
+                        Text("Find lights", Modifier.padding(start = 8.dp))
+                    }
+                    if (onDemo != null) {
+                        FilledTonalButton(onClick = onDemo) {
+                            Text(if (demoActive) "Resume demo controller" else "Try demo controller")
+                        }
+                        Text("Works without Bluetooth", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+                    }
                 }
             }
         }

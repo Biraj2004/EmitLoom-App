@@ -7,8 +7,10 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.text.KeyboardOptions
@@ -24,6 +26,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -34,13 +37,13 @@ import androidx.compose.runtime.saveable.listSaver
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.emitloom.app.model.ColorRgb
 import com.emitloom.app.model.ColorSequence
 import com.emitloom.app.model.ColorStep
+import com.emitloom.app.ui.components.ColorWheel
 import com.emitloom.app.ui.viewmodel.MainViewModel
 
 private val SequenceFieldsSaver = listSaver<List<String>, String>(
@@ -111,23 +114,32 @@ private fun SequenceEditor(
     var holds by rememberSaveable(existing?.id, stateSaver = SequenceFieldsSaver) {
         mutableStateOf(existing?.steps?.map { it.seconds.toString() } ?: listOf("2", "2"))
     }
+    var editingColor by rememberSaveable(existing?.id) { mutableStateOf<Int?>(null) }
+    val editorScroll = rememberScrollState()
+    editingColor?.let { index ->
+        StepColorDialog(index, colors[index], { editingColor = null }) { hex ->
+            colors = colors.toMutableList().apply { this[index] = hex }
+            editingColor = null
+        }
+        return
+    }
     val steps = colors.zip(holds) { hex, hold -> ColorStep.parse(hex, hold) }
     AlertDialog(
         onDismissRequest = dismiss,
         title = { Text(if (existing == null) "New sequence" else "Edit sequence") },
         text = {
-            Column(Modifier.heightIn(max = 460.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Column(Modifier.heightIn(max = 460.dp).verticalScroll(editorScroll), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedTextField(name, { if (it.length <= 40) name = it }, label = { Text("Name") }, singleLine = true)
-                Text("Enter hex colors and a hold time of 1–120 seconds for each step.")
+                Text("Pick a color and a hold time of 1–120 seconds for each step.")
                 for (index in colors.indices) {
                     Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         val rgb = ColorRgb.fromHex(colors[index])
-                        Box(Modifier.size(16.dp).background(rgb?.let { Color(it.red, it.green, it.blue) } ?: PanelRaised, CircleShape))
-                        OutlinedTextField(
-                            colors[index], { if (it.length <= 7) colors = colors.mapIndexed { i, value -> if (i == index) it else value } },
-                            Modifier.weight(1f), label = { Text("Color ${index + 1}") }, singleLine = true,
-                            isError = rgb == null
-                        )
+                        OutlinedButton(onClick = { editingColor = index }, modifier = Modifier.weight(1f)) {
+                            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Box(Modifier.size(14.dp).background(rgb?.asColor() ?: PanelRaised, CircleShape))
+                                Text("Color ${index + 1}")
+                            }
+                        }
                         OutlinedTextField(
                             holds[index], { hold ->
                                 if (hold.length <= 3 && hold.all(Char::isDigit)) {
@@ -158,6 +170,28 @@ private fun SequenceEditor(
                 save(name, steps.filterNotNull(), loop)
             }) { Text("Save") }
         },
+        dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } }
+    )
+}
+
+@Composable
+private fun StepColorDialog(index: Int, initial: String, dismiss: () -> Unit, apply: (String) -> Unit) {
+    var hex by rememberSaveable(index) { mutableStateOf(initial) }
+    val rgb = ColorRgb.fromHex(hex)
+    AlertDialog(
+        onDismissRequest = dismiss,
+        title = { Text("Color ${index + 1}") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 360.dp).verticalScroll(rememberScrollState()),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                ColorWheel(rgb ?: ColorRgb.fromHex(initial) ?: ColorRgb(255, 255, 255), { hex = it.toHex() },
+                    Modifier.widthIn(max = 220.dp).fillMaxWidth())
+                OutlinedTextField(hex, { if (it.length <= 7) hex = it }, label = { Text("Hex (optional)") }, singleLine = true)
+            }
+        },
+        confirmButton = { TextButton(enabled = rgb != null, onClick = { rgb?.let { apply(it.toHex()) } }) { Text("Apply") } },
         dismissButton = { TextButton(onClick = dismiss) { Text("Cancel") } }
     )
 }

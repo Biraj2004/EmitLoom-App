@@ -4,8 +4,8 @@ EmitLoom selects a direct Bluetooth protocol from a recognizable model name or k
 
 | Profile | Initial target models | Protocol and controls |
 | --- | --- | --- |
-| SP63xE/SP64xE | SP630E, SP631E–SP639E, SP63AE, SP641E–SP649E, SP64AE | Six-byte `53` header, followed by the payload. Color, white, and effects depend on the reported output configuration. |
-| A0 | SP611E, SP617E, SP620E, SP621E | `A0` command header and fragmented status notifications. Addressable effects. SP617E exposes a white channel. |
+| A0 | **SP621E** (primary), SP611E, SP617E, SP620E | `A0` command header and fragmented status notifications. Addressable effects. SP617E exposes a white channel. |
+| SP63xE/SP64xE | SP630E–SP639E, SP63AE, SP641E–SP649E, SP64AE | Six-byte `53` header, followed by the payload. Color, white, and effects depend on the reported output configuration. |
 | Compact | SP613E, SP614E, SP623E, SP624E | Command and payload length followed by the payload. PWM effects. SP614E and SP624E expose white brightness. |
 | Dual output | SP601E | `AA` command header with per-output fields. Independent output controls and recall of preexisting scene slots. |
 
@@ -18,6 +18,18 @@ Commands use GATT service `FFE0` and characteristic `FFE1`. The SP63xE/SP64xE pr
 - The color-sequence editor sends commands from the phone to one connected RGB output. Controller-stored DIY effects and pixel-layout editors require additional model-specific protocol evidence.
 - Multi-controller groups, Wi-Fi and mesh provisioning, network control, music-file playback, and firmware updates remain outside the implemented scope.
 - The compatibility list comes from protocol evidence and packet tests. Firmware variants, Bluetooth behavior, and physical LED output require hands-on verification.
+- The temporary demo uses a single RGB output from the SP621E profile. The software strip preview illustrates the active light state and representative effects. Physical effect timing, pixel count, audio response, and BLE behavior require hardware verification.
+
+## BanlanX feature progress on SP621E
+
+| Area | EmitLoom status |
+| --- | --- |
+| Core lighting | RGB wheel, brightness, power, dynamic effects, speed, effect length, effect cycling, and RGB channel order are implemented. Real-device verification is pending. |
+| Sound | Phone microphone sync pulses RGB brightness. BanlanX's phone-audio streaming into the controller's music presets and music-file streaming are outside the current scope. |
+| Saved settings and timing | EmitLoom saves looks and color sequences on the phone and offers a one-shot phone timer. BanlanX supports multiple timing events and controller groups. |
+| Preview | EmitLoom provides an interactive 24-LED software sample and a temporary no-hardware demo. |
+
+[Sperll SP621E product guide](https://document.sperll.com/homepage/upload/Doc/SP621E%20Mini%20Bluetooth%20Music%20Pixel%20LED%20Controller_CN_EN.pdf)
 
 ## Hardware verification
 
