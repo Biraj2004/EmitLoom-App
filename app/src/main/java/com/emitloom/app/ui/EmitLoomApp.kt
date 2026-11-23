@@ -84,7 +84,13 @@ import com.emitloom.app.ui.viewmodel.MainViewModel
 private enum class Page { DEVICES, CONTROL, SETTINGS }
 
 @Composable
-fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedController) -> Unit, onPhoneMic: () -> Unit) {
+fun EmitLoomApp(
+    model: MainViewModel,
+    onScan: () -> Unit,
+    onConnect: (SavedController) -> Unit,
+    onPhoneMic: () -> Unit,
+    onNowPlaying: () -> Unit
+) {
     val saved by model.controllers.collectAsStateWithLifecycle()
     val controllerGrid by model.controllerGrid.collectAsStateWithLifecycle()
     val discovery by model.discovery.collectAsStateWithLifecycle()
@@ -150,7 +156,7 @@ fun EmitLoomApp(model: MainViewModel, onScan: () -> Unit, onConnect: (SavedContr
                         model, active, saved.firstOrNull { it.device == active.device }
                     )
                     active != null && page == Page.CONTROL -> ControllerScreen(
-                        model, active, onSettings = { page = Page.SETTINGS }, onPhoneMic = onPhoneMic
+                        model, active, onSettings = { page = Page.SETTINGS }, onPhoneMic = onPhoneMic, onNowPlaying = onNowPlaying
                     )
                     else -> DeviceCollection(
                         saved = saved,

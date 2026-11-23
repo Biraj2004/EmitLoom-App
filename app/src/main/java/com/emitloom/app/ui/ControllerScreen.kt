@@ -8,6 +8,7 @@
 
 package com.emitloom.app.ui
 
+import android.os.Build
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -26,15 +27,18 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.PowerSettingsNew
@@ -64,6 +68,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -94,7 +99,10 @@ import com.emitloom.app.protocol.ControllerProfile
 import com.emitloom.app.ui.components.ColorWheel
 import com.emitloom.app.ui.components.StripPreview
 import com.emitloom.app.ui.viewmodel.ActiveTimer
+import com.emitloom.app.ui.viewmodel.AudioSync
+import com.emitloom.app.ui.viewmodel.AudioSyncSource
 import com.emitloom.app.ui.viewmodel.DeviceControls
+import com.emitloom.app.ui.viewmodel.MAX_POWER_TIMERS
 import com.emitloom.app.ui.viewmodel.MainViewModel
 import kotlinx.coroutines.delay
 import kotlin.math.roundToInt
@@ -112,15 +120,21 @@ private val quickColors = listOf(
 )
 
 @Composable
-internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onSettings: () -> Unit, onPhoneMic: () -> Unit) {
+internal fun ControllerScreen(
+    model: MainViewModel,
+    current: DeviceControls,
+    onSettings: () -> Unit,
+    onPhoneMic: () -> Unit,
+    onNowPlaying: () -> Unit
+) {
     val light = current.light
     val device = current.device
     val scene = device.profile == ControllerProfile.FRAMED
     val rgb = device.hasRgb(light)
     val white = device.hasWhite(light)
     val looks by model.looks.collectAsStateWithLifecycle()
-    val timer by model.timer.collectAsStateWithLifecycle()
-    val mic by model.phoneMic.collectAsStateWithLifecycle()
+    val timers by model.timers.collectAsStateWithLifecycle()
+    val audioSync by model.audioSync.collectAsStateWithLifecycle()
     var page by rememberSaveable(device.address, current.channel) {
         mutableStateOf(when (light.mode) {
             LightMode.EFFECTS, LightMode.WHITE_EFFECTS -> ControlPage.EFFECTS
@@ -154,11 +168,11 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
     ) {
         stickyHeader {
             Box(Modifier.fillMaxWidth().background(Ink).padding(bottom = 4.dp)) {
-                StripPreview(light, stripEffects, mic)
+                StripPreview(light, stripEffects, audioSync)
             }
         }
         item {
-            PowerPanel(current, timer, model::power, onSettings) { dialog = "timer" }
+            PowerPanel(current, timers, model::power, onSettings) { dialog = "timer" }
         }
         if (current.outputs.size > 1) {
             item {
@@ -230,19 +244,19 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
 
         if (page == ControlPage.SOUND && rgb) {
             item {
-                ControlPanel {
-                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                        Icon(Icons.Rounded.Mic, null, tint = Mint)
-                        Column(Modifier.weight(1f)) {
-                            SectionTitle("Phone microphone")
-                            Text("Pulse brightness with sound around your phone.", color = TextMuted)
-                        }
-                    }
-                    if (mic != null) {
-                        LinearProgressIndicator(progress = { mic ?: 0f }, modifier = Modifier.fillMaxWidth())
-                        FilledTonalButton(onClick = model::stopPhoneMic) { Text("Stop sync") }
-                    } else Button(onClick = onPhoneMic) { Text("Start sync") }
-                }
+                SoundSourcePanel(
+                    AudioSyncSource.MICROPHONE, Icons.Rounded.Mic, "Pulse brightness with sound around your phone.",
+                    audioSync, onStart = onPhoneMic, onStop = model::stopAudioSync
+                )
+            }
+            item {
+                val supported = Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q
+                SoundSourcePanel(
+                    AudioSyncSource.PLAYBACK, Icons.Rounded.MusicNote,
+                    if (supported) "Pulse brightness with audio playing in compatible apps. Android asks for capture approval."
+                    else "Playback capture is available on Android 10 and later.",
+                    audioSync, supported, onNowPlaying, model::stopAudioSync
+                )
             }
         }
 
@@ -345,7 +359,7 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
     when (dialog) {
         "hex" -> HexDialog(light.color, { dialog = "" }, model::setColor)
         "look" -> NameDialog("Save look", onDismiss = { dialog = "" }, onSave = model::saveLook)
-        "timer" -> TimerDialog(timer, { dialog = "" }, model::setTimer, model::cancelTimer)
+        "timer" -> TimerDialog(timers, current, { dialog = "" }, model::addTimer, model::cancelTimer)
     }
 
     deleteLook?.let { look ->
@@ -360,9 +374,49 @@ internal fun ControllerScreen(model: MainViewModel, current: DeviceControls, onS
 }
 
 @Composable
+private fun SoundSourcePanel(
+    source: AudioSyncSource,
+    icon: ImageVector,
+    description: String,
+    sync: AudioSync?,
+    available: Boolean = true,
+    onStart: () -> Unit,
+    onStop: () -> Unit
+) {
+    ControlPanel {
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            Icon(icon, null, tint = Mint)
+            Column(Modifier.weight(1f)) {
+                SectionTitle(source.title)
+                Text(description, color = TextMuted)
+            }
+        }
+        if (sync?.source == source) {
+            val level = sync.level
+            if (level == null) {
+                LinearProgressIndicator(Modifier.fillMaxWidth())
+                Text("Starting sync…", style = MaterialTheme.typography.bodySmall, color = TextMuted)
+            } else {
+                LinearProgressIndicator(progress = { level }, modifier = Modifier.fillMaxWidth())
+            }
+            FilledTonalButton(
+                onClick = onStop,
+                modifier = Modifier.semantics { contentDescription = "Stop ${source.title} sync" }
+            ) { Text("Stop sync") }
+        } else {
+            Button(
+                onClick = onStart,
+                enabled = available && sync == null,
+                modifier = Modifier.semantics { contentDescription = "Start ${source.title} sync" }
+            ) { Text("Start sync") }
+        }
+    }
+}
+
+@Composable
 private fun PowerPanel(
     current: DeviceControls,
-    timer: ActiveTimer?,
+    timers: List<ActiveTimer>,
     onPower: (Boolean) -> Unit,
     onSettings: () -> Unit,
     onTimer: () -> Unit
@@ -393,11 +447,12 @@ private fun PowerPanel(
         HorizontalDivider(color = Divider)
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(Icons.Rounded.Timer, null, tint = Mint, modifier = Modifier.size(20.dp))
+            val next = timers.firstOrNull()
             Text(
-                timer?.let { "${if (it.turnOn) "On" else "Off"} in ${remainingTime(it)}" } ?: "Power timer",
+                next?.let { "Next ${timerLabel(it, current.outputs.size > 1)}" } ?: "Power timers",
                 Modifier.weight(1f).padding(start = 10.dp)
             )
-            TextButton(onClick = onTimer) { Text(if (timer == null) "Set timer" else "Manage") }
+            TextButton(onClick = onTimer) { Text(if (next == null) "Set timer" else "Manage (${timers.size})") }
         }
     }
 }
@@ -494,36 +549,59 @@ private fun HexDialog(color: ColorRgb, onDismiss: () -> Unit, onColor: (ColorRgb
 }
 
 @Composable
-private fun TimerDialog(timer: ActiveTimer?, onDismiss: () -> Unit, onSet: (Int, Boolean) -> Unit, onCancel: () -> Unit) {
+private fun TimerDialog(
+    timers: List<ActiveTimer>,
+    current: DeviceControls,
+    onDismiss: () -> Unit,
+    onAdd: (Int, Boolean) -> Unit,
+    onCancel: (Long) -> Unit
+) {
     var minutes by rememberSaveable { mutableStateOf("30") }
     var turnOn by rememberSaveable { mutableStateOf(false) }
     val duration = minutes.toIntOrNull()?.takeIf { it in 1..720 }
+    val multipleOutputs = current.outputs.size > 1
+    val hasRoom = timers.size < MAX_POWER_TIMERS
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Power timer") },
+        title = { Text("Power timers") },
         text = {
-            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("The timer runs on this phone while EmitLoom stays connected.")
-                if (timer != null) Text("${if (timer.turnOn) "On" else "Off"} in ${remainingTime(timer)}")
-                ChoicePair("Turn off", "Turn on", turnOn) { turnOn = it }
-                OutlinedTextField(
-                    minutes, { if (it.length <= 3 && it.all(Char::isDigit)) minutes = it },
-                    label = { Text("Minutes (1–720)") }, singleLine = true,
-                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
-                )
+            Column(Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Timers run on this phone while EmitLoom stays connected.")
+                timers.forEach { timer ->
+                    key(timer.id) {
+                        val label = timerLabel(timer, multipleOutputs)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(label, Modifier.weight(1f), color = TextMuted)
+                            IconButton(onClick = { onCancel(timer.id) }) { Icon(Icons.Rounded.Close, "Cancel $label") }
+                        }
+                    }
+                }
+                if (hasRoom) {
+                    if (multipleOutputs) Text("Add timer for output ${current.channel + 1}", color = TextMuted)
+                    ChoicePair("Turn off", "Turn on", turnOn) { turnOn = it }
+                    OutlinedTextField(
+                        minutes, { if (it.length <= 3 && it.all(Char::isDigit)) minutes = it },
+                        label = { Text("Minutes (1–720)") }, singleLine = true,
+                        keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number)
+                    )
+                } else Text("All $MAX_POWER_TIMERS timer slots are in use.", color = TextMuted)
             }
         },
         confirmButton = {
-            TextButton(enabled = duration != null, onClick = { duration?.let { onSet(it, turnOn) }; onDismiss() }) {
-                Text(if (timer == null) "Start" else "Replace")
+            TextButton(enabled = hasRoom && duration != null, onClick = { duration?.let { onAdd(it, turnOn) } }) {
+                Text("Add timer")
             }
         },
-        dismissButton = {
-            TextButton(onClick = { if (timer != null) onCancel(); onDismiss() }) {
-                Text(if (timer == null) "Cancel" else "Cancel timer")
-            }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Done") } }
     )
+}
+
+@Composable
+private fun timerLabel(timer: ActiveTimer, multipleOutputs: Boolean): String {
+    val action = if (timer.turnOn) "On" else "Off"
+    val time = remainingTime(timer)
+    return if (multipleOutputs) "Output ${timer.channel + 1} · $action in $time" else "$action in $time"
 }
 
 @Composable

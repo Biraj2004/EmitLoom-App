@@ -3,11 +3,16 @@
 package com.emitloom.app.ui.viewmodel
 
 import android.app.Application
+import android.content.Intent
+import android.os.Build
 import android.os.SystemClock
+import androidx.annotation.RequiresApi
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.emitloom.app.BuildConfig
 import com.emitloom.app.audio.AudioReactiveEngine
+import com.emitloom.app.audio.PlaybackCaptureService
+import com.emitloom.app.audio.audioBrightness
 import com.emitloom.app.bluetooth.BleManager
 import com.emitloom.app.bluetooth.ScanEntry
 import com.emitloom.app.model.ColorRgb
@@ -49,7 +54,13 @@ data class DeviceControls(
     val light: LightState get() = outputs[channel]
 }
 
-data class ActiveTimer(val deadline: Long, val turnOn: Boolean, val channel: Int)
+internal const val MAX_POWER_TIMERS = 5
+
+data class ActiveTimer(val id: Long, val deadline: Long, val turnOn: Boolean, val channel: Int)
+
+enum class AudioSyncSource(val title: String) { MICROPHONE("Phone microphone"), PLAYBACK("Now Playing") }
+
+data class AudioSync(val source: AudioSyncSource, val level: Float? = null)
 
 class MainViewModel(application: Application) : AndroidViewModel(application) {
     private val ble = BleManager(application)
@@ -72,14 +83,15 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     private var sequenceJob: Job? = null
     private val _controls = MutableStateFlow<DeviceControls?>(null)
     val controls = _controls.asStateFlow()
-    private val _timer = MutableStateFlow<ActiveTimer?>(null)
-    val timer = _timer.asStateFlow()
-    private val _phoneMic = MutableStateFlow<Float?>(null)
-    val phoneMic = _phoneMic.asStateFlow()
+    private val _timers = MutableStateFlow<List<ActiveTimer>>(emptyList())
+    val timers = _timers.asStateFlow()
+    private val _audioSync = MutableStateFlow<AudioSync?>(null)
+    val audioSync = _audioSync.asStateFlow()
     private val _message = MutableStateFlow<String?>(null)
     val message = _message.asStateFlow()
-    private var micJob: Job? = null
-    private var timerJob: Job? = null
+    private var audioJob: Job? = null
+    private val timerJobs = mutableMapOf<Long, Job>()
+    private var nextTimerId = 0L
     private var nameOnConnect: String? = null
 
     init {
@@ -90,13 +102,19 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
                 if (device == null || value.outputs.isEmpty()) {
                     _controls.value = null
                     stopSequence()
-                    stopPhoneMic(restore = false)
-                    cancelTimer()
+                    stopAudioSync(restore = false)
+                    cancelTimers()
                     return@collect
                 }
                 val current = _controls.value
                 val channel = if (current?.device == device) current.channel else 0
-                _controls.value = DeviceControls(device, value.outputs, channel.coerceIn(value.outputs.indices))
+                val selected = channel.coerceIn(value.outputs.indices)
+                val outputs = if (_audioSync.value != null && current?.device == device && channel == selected) {
+                    value.outputs.toMutableList().apply {
+                        this[selected] = this[selected].copy(brightness = current.light.brightness)
+                    }
+                } else value.outputs
+                _controls.value = DeviceControls(device, outputs, selected)
                 if (_controllers.value.none { it.device.address == device.address }) {
                     updateControllers(_controllers.value + SavedController(device, nameOnConnect ?: device.model))
                 }
@@ -137,8 +155,8 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     fun disconnect() {
         val wasDemo = _controls.value?.demoName != null
         stopSequence()
-        stopPhoneMic(restore = false)
-        cancelTimer()
+        stopAudioSync(restore = false)
+        cancelTimers()
         _controls.value = null
         if (wasDemo) {
             _looks.value = library.looks()
@@ -173,12 +191,12 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val current = _controls.value ?: return
         if (channel !in current.outputs.indices || channel == current.channel) return
         stopSequence()
-        stopPhoneMic()
+        stopAudioSync()
         _controls.value = current.copy(channel = channel)
     }
 
     fun power(on: Boolean) {
-        if (!on) stopPhoneMic(restore = false)
+        if (!on) stopAudioSync()
         change { protocol, current ->
             listOf(protocol.power(current.channel, on)) to current.light.copy(power = on)
         }
@@ -216,7 +234,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun white(value: Int) {
-        stopPhoneMic()
+        stopAudioSync()
         val level = value.coerceIn(0, 255)
         change("white") { protocol, current ->
             protocol.white(current.channel, level, current.light.mode != LightMode.WHITE) to
@@ -225,6 +243,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun temperature(warm: Int) {
+        stopAudioSync()
         val level = warm.coerceIn(0, 255)
         change("temperature") { protocol, current ->
             val packets = buildList {
@@ -238,7 +257,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun effect(mode: LightMode, id: Int) {
-        stopPhoneMic()
+        stopAudioSync()
         change { protocol, current ->
             listOf(protocol.effect(current.channel, mode, id)) to current.light.copy(mode = mode, effect = id)
         }
@@ -278,7 +297,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
     }
 
     fun lightType(type: LightType) {
-        stopPhoneMic()
+        stopAudioSync()
         change { protocol, current ->
             val mode = if (type.rgb) LightMode.COLOR else LightMode.WHITE
             val commands = buildList {
@@ -309,13 +328,14 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val protocol = ControllerProtocol(current.device.profile)
         val scene = protocol.scene(slot) ?: return
         stopSequence()
+        stopAudioSync()
         send(current, listOf(scene, protocol.status()))
     }
 
     fun refresh() {
         val current = _controls.value ?: return
         stopSequence()
-        stopPhoneMic()
+        stopAudioSync()
         send(current, listOf(ControllerProtocol(current.device.profile).status()))
         if (current.demoName != null) showMessage("Demo controller status is current.")
     }
@@ -349,7 +369,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
             return
         }
         selectChannel(look.channel)
-        stopPhoneMic()
+        stopAudioSync()
         change { p, c ->
             val channel = c.channel
             val packets = buildList {
@@ -383,71 +403,104 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         }
     }
 
-    fun setTimer(minutes: Int, turnOn: Boolean) {
+    fun addTimer(minutes: Int, turnOn: Boolean) {
         val current = _controls.value ?: return
-        cancelTimer()
-        val duration = minutes.coerceIn(1, 720) * 60_000L
-        val timer = ActiveTimer(SystemClock.elapsedRealtime() + duration, turnOn, current.channel)
-        _timer.value = timer
-        timerJob = viewModelScope.launch {
+        if (_timers.value.size >= MAX_POWER_TIMERS || minutes !in 1..720) return
+        val duration = minutes * 60_000L
+        val timer = ActiveTimer(nextTimerId++, SystemClock.elapsedRealtime() + duration, turnOn, current.channel)
+        _timers.update { (it + timer).sortedBy(ActiveTimer::deadline) }
+        timerJobs[timer.id] = viewModelScope.launch {
             delay(duration)
-            val active = _controls.value?.takeIf { it.device == current.device }
+            val active = _controls.value?.takeIf { it.device == current.device && timer.channel in it.outputs.indices }
             if (active != null) {
                 if (!turnOn && timer.channel == active.channel) {
                     stopSequence()
-                    stopPhoneMic(restore = false)
+                    stopAudioSync()
                 }
                 val packet = ControllerProtocol(active.device.profile).power(timer.channel, turnOn)
                 if (send(active, listOf(packet))) {
                     updateOutput(active, timer.channel, active.outputs[timer.channel].copy(power = turnOn))
                 }
             }
-            _timer.value = null
+            timerJobs.remove(timer.id)
+            _timers.update { timers -> timers.filterNot { it.id == timer.id } }
         }
     }
 
-    fun cancelTimer() {
-        timerJob?.cancel()
-        timerJob = null
-        _timer.value = null
+    fun cancelTimer(id: Long) {
+        timerJobs.remove(id)?.cancel()
+        _timers.update { timers -> timers.filterNot { it.id == id } }
     }
 
-    fun startPhoneMic() {
+    private fun cancelTimers() {
+        timerJobs.values.forEach { it.cancel() }
+        timerJobs.clear()
+        _timers.value = emptyList()
+    }
+
+    fun startPhoneMic() = startAudioSync(AudioSyncSource.MICROPHONE, AudioReactiveEngine::captureMicrophone)
+
+    @RequiresApi(Build.VERSION_CODES.Q)
+    fun startNowPlaying(consent: Intent) = startAudioSync(AudioSyncSource.PLAYBACK) { onLevel ->
+        PlaybackCaptureService.capture(getApplication(), consent, onLevel)
+    }
+
+    private fun startAudioSync(source: AudioSyncSource, capture: suspend (suspend (Float) -> Unit) -> Unit) {
         val current = _controls.value ?: return
-        if (micJob?.isActive == true || !current.device.hasRgb(current.light)) return
-        setColor(current.light.color)
-        if (!current.light.power) power(true)
-        _phoneMic.value = 0f
-        micJob = viewModelScope.launch {
+        if (audioJob?.isActive == true || !current.device.hasRgb(current.light)) return
+        _audioSync.value = AudioSync(source)
+        audioJob = viewModelScope.launch(start = CoroutineStart.LAZY) {
             try {
-                AudioReactiveEngine.capture { level ->
+                capture { level ->
                     withContext(Dispatchers.Main) {
+                        val sync = _audioSync.value ?: return@withContext
+                        if (audioJob !== this@launch.coroutineContext[Job]) return@withContext
                         val active = _controls.value?.takeIf { it.device == current.device && it.channel == current.channel }
                             ?: return@withContext
-                        _phoneMic.value = level
-                        val base = active.light.brightness
-                        val output = (base * (0.15f + level * 0.85f)).toInt()
-                        send(active, listOf(ControllerProtocol(active.device.profile).brightness(active.channel, output)), "phone-mic")
+                        if (sync.level == null) {
+                            setColor(active.light.color)
+                            if (!active.light.power) power(true)
+                        }
+                        _audioSync.value = sync.copy(level = level)
+                        sendAudioBrightness(active, audioBrightness(active.light.brightness, level))
                     }
                 }
             } catch (cancelled: CancellationException) {
                 throw cancelled
             } catch (_: Exception) {
-                _phoneMic.value = null
-                _message.value = "Microphone capture could not start. Check the microphone permission and try again."
+                _message.value = when (source) {
+                    AudioSyncSource.MICROPHONE -> "Microphone sync stopped. Check microphone access and try again."
+                    AudioSyncSource.PLAYBACK -> "Now Playing sync stopped. Allow audio capture and try again."
+                }
+            } finally {
+                if (audioJob === currentCoroutineContext()[Job]) {
+                    audioJob = null
+                    clearAudioSync(restore = true)
+                }
             }
         }
+        audioJob?.start()
     }
 
-    private fun stopPhoneMic(restore: Boolean) {
-        val wasActive = _phoneMic.value != null
-        micJob?.cancel()
-        micJob = null
-        _phoneMic.value = null
-        if (wasActive && restore) _controls.value?.let { brightness(it.light.brightness) }
+    private fun stopAudioSync(restore: Boolean) {
+        val job = audioJob
+        audioJob = null
+        job?.cancel()
+        clearAudioSync(restore)
     }
 
-    fun stopPhoneMic() = stopPhoneMic(restore = true)
+    private fun clearAudioSync(restore: Boolean) {
+        val wasPulsing = _audioSync.value?.level != null
+        _audioSync.value = null
+        if (wasPulsing && restore) _controls.value?.let { sendAudioBrightness(it, it.light.brightness) }
+    }
+
+    private fun sendAudioBrightness(current: DeviceControls, level: Int) {
+        val packet = ControllerProtocol(current.device.profile).brightness(current.channel, level)
+        send(current, listOf(packet), "audio-sync-${current.channel}")
+    }
+
+    fun stopAudioSync() = stopAudioSync(restore = true)
 
     fun saveSequence(id: String?, name: String, steps: List<ColorStep>, loop: Boolean) {
         val sequence = ColorSequence(id ?: UUID.randomUUID().toString(), name.trim(), steps.toList(), loop)
@@ -465,7 +518,7 @@ class MainViewModel(application: Application) : AndroidViewModel(application) {
         val selected = _controls.value ?: return
         if (!selected.device.hasRgb(selected.light)) return
         stopSequence()
-        stopPhoneMic()
+        stopAudioSync()
         val protocol = ControllerProtocol(selected.device.profile)
         _playingSequence.value = sequence.id
         sequenceJob = viewModelScope.launch(start = CoroutineStart.LAZY) {

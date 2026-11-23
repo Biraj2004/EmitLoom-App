@@ -13,10 +13,10 @@ EmitLoom is a native Android app for controlling compatible LED lights over Blue
 
 - Scan for nearby controllers, reconnect to saved devices, and rename them locally. Switch between list and grid views, with the choice saved on the phone.
 - Drag the color wheel or tap a preset to pick RGB colors. Adjust brightness independently and see the result on a 24-LED sample strip. Supported outputs also expose white brightness and warmth.
-- Browse controller effects, adjust speed, and use the hardware microphone on models that provide one. Phone microphone sync pulses RGB brightness while the app is open.
+- Browse controller effects, adjust speed, and use the hardware microphone on models that provide one. **Phone microphone** uses nearby sound, and **Now Playing** uses playback from compatible Android apps on Android 10 or newer. Both pulse RGB brightness while EmitLoom is open.
 - Save and recall looks on your phone. SP601E also exposes existing controller scene slots and separate output controls.
 - Create color sequences with individual hold times and optional looping. Play them in the app on a connected RGB output.
-- Set a one-shot power timer while connected. Some models expose transition effects, output configuration, and power-restore settings.
+- Queue up to five one-shot power timers while connected. Some models expose transition effects, output configuration, and power-restore settings.
 
 [Using the controls](docs/WORKFLOWS.md) · [Build and publish](docs/RELEASING.md)
 
@@ -54,7 +54,7 @@ To try the SP621E controls without nearby hardware, see the [temporary demo buil
 
 ## Data and permissions
 
-EmitLoom stores controller addresses, display names, looks, and color sequences on the phone. Bluetooth is used to discover and control devices. Phone microphone sync processes audio in memory to calculate volume and discards the samples. EmitLoom has no Internet permission, account service, or analytics. Use **Forget controller** to remove a controller and its saved looks, or clear the app's storage in Android settings to remove all local data.
+EmitLoom stores controller addresses, display names, looks, and color sequences on the phone. Bluetooth is used to discover and control devices. Both phone audio sources process samples in memory to calculate volume and discard the samples. Now Playing requires Android capture approval for each session. EmitLoom has no Internet permission, account service, or analytics. Use **Forget controller** to remove a controller and its saved looks, or clear the app's storage in Android settings to remove all local data.
 
 [Privacy notice](PRIVACY.md)
 

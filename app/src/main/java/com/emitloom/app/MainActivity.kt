@@ -6,6 +6,8 @@ import android.Manifest
 import android.app.Activity
 import android.bluetooth.BluetoothAdapter
 import android.content.Intent
+import android.media.projection.MediaProjectionConfig
+import android.media.projection.MediaProjectionManager
 import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -48,6 +50,18 @@ class MainActivity : ComponentActivity() {
         else model.showMessage("Microphone permission is required for phone sound sync.")
     }
 
+    private val playbackPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        if (granted) requestPlaybackCapture()
+        else model.showMessage("Allow microphone access in Android to enable playback audio capture.")
+    }
+
+    private val playbackConsent = registerForActivityResult(ActivityResultContracts.StartActivityForResult()) { result ->
+        val consent = result.data
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q && result.resultCode == Activity.RESULT_OK && consent != null) {
+            model.startNowPlaying(consent)
+        } else model.showMessage("Now Playing sync requires Android's capture approval.")
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge(
@@ -63,6 +77,10 @@ class MainActivity : ComponentActivity() {
                     onPhoneMic = {
                         if (hasPermission(Manifest.permission.RECORD_AUDIO)) model.startPhoneMic()
                         else microphone.launch(Manifest.permission.RECORD_AUDIO)
+                    },
+                    onNowPlaying = {
+                        if (hasPermission(Manifest.permission.RECORD_AUDIO)) requestPlaybackCapture()
+                        else playbackPermission.launch(Manifest.permission.RECORD_AUDIO)
                     }
                 )
             }
@@ -72,8 +90,21 @@ class MainActivity : ComponentActivity() {
     override fun onStop() {
         model.stopSequence()
         model.stopScan()
-        model.stopPhoneMic()
+        model.stopAudioSync()
         super.onStop()
+    }
+
+    private fun requestPlaybackCapture() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.Q) return
+        try {
+            val manager = getSystemService(MediaProjectionManager::class.java)
+            val intent = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.UPSIDE_DOWN_CAKE) {
+                manager.createScreenCaptureIntent(MediaProjectionConfig.createConfigForDefaultDisplay())
+            } else manager.createScreenCaptureIntent()
+            playbackConsent.launch(intent)
+        } catch (_: RuntimeException) {
+            model.showMessage("Android could not open the Now Playing capture prompt.")
+        }
     }
 
     private fun withBluetooth(action: () -> Unit) {

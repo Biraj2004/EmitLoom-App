@@ -41,6 +41,7 @@ import com.emitloom.app.ui.Ink
 import com.emitloom.app.ui.Panel
 import com.emitloom.app.ui.TextMuted
 import com.emitloom.app.ui.asColor
+import com.emitloom.app.ui.viewmodel.AudioSync
 import kotlin.math.PI
 import kotlin.math.floor
 import kotlin.math.roundToInt
@@ -53,7 +54,7 @@ private val Unlit = Color(0xFF263630)
 internal fun StripPreview(
     light: LightState,
     effects: List<LightEffect>,
-    mic: Float?,
+    audioSync: AudioSync?,
     modifier: Modifier = Modifier
 ) {
     val index = remember(effects, light.effect) { effects.indexOfFirst { it.id == light.effect } }
@@ -85,7 +86,7 @@ internal fun StripPreview(
     } else light.color.asColor()
     val status = when {
         !light.power -> "Off"
-        mic != null -> "Phone microphone"
+        audioSync != null -> audioSync.source.title
         selected != null && !light.playing -> "Paused"
         selected != null && light.loop -> "Cycling effects"
         selected != null -> selected.name
@@ -117,7 +118,7 @@ internal fun StripPreview(
             val time = seconds * (0.26f + light.speed.coerceIn(1, 10) * .16f)
             val sound = light.mode == LightMode.MUSIC || light.mode == LightMode.WHITE_MUSIC
             val gain = (light.sensitivity / 16f).coerceIn(.06f, 1f)
-            val audio = mic?.let { .15f + .85f * it.coerceIn(0f, 1f) } ?: 1f
+            val audio = audioSync?.level?.let { .15f + .85f * it.coerceIn(0f, 1f) } ?: 1f
             val level = if (light.power) (brightness / 255f).coerceIn(0f, 1f) * audio else 0f
             val length = if (light.length > 0) light.length.coerceIn(1, 150) / 150f else .24f
             repeat(SampleSize) { pixel ->

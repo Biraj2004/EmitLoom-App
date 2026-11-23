@@ -14,9 +14,9 @@ Commands use GATT service `FFE0` and characteristic `FFE1`. The SP63xE/SP64xE pr
 ## Current scope
 
 - One connected controller at a time. Saved controllers and looks remain available between sessions.
-- The power timer runs on the phone and depends on the active connection and process. It does not program a controller schedule.
+- Up to five one-shot power timers run on the phone and depend on the active connection and process. Controller-stored schedules are outside the current scope.
 - The color-sequence editor sends commands from the phone to one connected RGB output. Controller-stored DIY effects and pixel-layout editors require additional model-specific protocol evidence.
-- Multi-controller groups, Wi-Fi and mesh provisioning, network control, music-file playback, and firmware updates remain outside the implemented scope.
+- Multi-controller groups, Wi-Fi and mesh provisioning, network control, an in-app music player, and firmware updates remain outside the implemented scope.
 - The compatibility list comes from protocol evidence and packet tests. Firmware variants, Bluetooth behavior, and physical LED output require hands-on verification.
 - The temporary demo uses a single RGB output from the SP621E profile. The software strip preview illustrates the active light state and representative effects. Physical effect timing, pixel count, audio response, and BLE behavior require hardware verification.
 
@@ -25,11 +25,17 @@ Commands use GATT service `FFE0` and characteristic `FFE1`. The SP63xE/SP64xE pr
 | Area | EmitLoom status |
 | --- | --- |
 | Core lighting | RGB wheel, brightness, power, dynamic effects, speed, effect length, effect cycling, and RGB channel order are implemented. Real-device verification is pending. |
-| Sound | Phone microphone sync pulses RGB brightness. BanlanX's phone-audio streaming into the controller's music presets and music-file streaming are outside the current scope. |
-| Saved settings and timing | EmitLoom saves looks and color sequences on the phone and offers a one-shot phone timer. BanlanX supports multiple timing events and controller groups. |
+| Sound | Both **Phone microphone** and **Now Playing** pulse RGB brightness. Now Playing uses Android 10+ playback capture for compatible apps. Mapping audio into the SP621E's firmware music presets requires protocol evidence and hardware verification. |
+| Saved settings and timing | EmitLoom saves looks and color sequences on the phone and supports up to five one-shot power timers per connection. BanlanX also supports controller timing events and device groups. |
 | Preview | EmitLoom provides an interactive 24-LED software sample and a temporary no-hardware demo. |
 
 [Sperll SP621E product guide](https://document.sperll.com/homepage/upload/Doc/SP621E%20Mini%20Bluetooth%20Music%20Pixel%20LED%20Controller_CN_EN.pdf)
+
+### Next verification
+
+1. On a physical SP621E, check that phone microphone and Now Playing both react, that stopping restores brightness, and that Android capture revocation ends the session. Test playback with a compatible media app and with playback paused.
+2. Queue separate on and off timers, cancel one, then disconnect and reconnect to confirm the queue clears. On SP601E, schedule each output separately.
+3. Record verified controller behavior before adding vendor-specific audio streaming, controller-stored timing, or controller groups. The extracted BanlanX Android component confirms a foreground microphone recorder. It does not establish the SP621E packet format for playback audio or timing events.
 
 ## Hardware verification
 
