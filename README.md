@@ -24,7 +24,7 @@ The initial compatibility targets are SP601E, SP611E, SP617E, SP620E, SP621E, SP
 
 ## Install and connect
 
-1. Install the signed APK on an Android phone. A local release build exports `apk-export/emitloom-v1.0.0-release.apk`.
+1. Download the signed APK from the [latest GitHub release](https://github.com/Biraj2004/EmitLoom-App/releases/latest) and install it on an Android phone.
 2. Power the controller and keep it near the phone. Disconnect any other app using the controller.
 3. Open EmitLoom, tap **Find lights**, and grant the Android Bluetooth permission. Android 11 and earlier also require Location for BLE scanning.
 4. Select the controller. EmitLoom reads its current state before opening the controls.

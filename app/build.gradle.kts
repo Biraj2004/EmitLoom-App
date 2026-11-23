@@ -9,7 +9,8 @@ plugins {
     alias(libs.plugins.kotlin.compose)
 }
 
-val emitloomVersion = "1.0.0"
+val emitloomVersion = providers.gradleProperty("emitloomVersionName").getOrElse("1.0.0")
+val emitloomVersionCode = providers.gradleProperty("emitloomVersionCode").getOrElse("1").toInt()
 val licenseAssets = layout.buildDirectory.dir("generated/emitloomLicenseAssets")
 val packageLicense = tasks.register<Copy>("packageProjectLicense") {
     from(rootProject.file("LICENSE"))
@@ -30,7 +31,7 @@ android {
         applicationId = "com.emitloom.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
+        versionCode = emitloomVersionCode
         versionName = emitloomVersion
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
@@ -113,7 +114,9 @@ androidComponents.onVariants(androidComponents.selector().withBuildType("release
             val apk = checkNotNull(loader.load(apkDirectory.get())?.elements?.singleOrNull()) {
                 "Expected exactly one release APK."
             }
-            check(apk.versionName == emitloomVersion) { "Unexpected release APK version." }
+            check(apk.versionName == emitloomVersion && apk.versionCode == emitloomVersionCode) {
+                "Unexpected release APK version."
+            }
             val exportDir = rootProject.file("apk-export").toPath()
             Files.createDirectories(exportDir)
             val destination = exportDir.resolve("emitloom-v$emitloomVersion-release.apk")
